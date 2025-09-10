@@ -67,19 +67,6 @@ fun Settings02Screen(
     var isUploading by remember { mutableStateOf(false) }
     var uploadResult by remember { mutableStateOf<String?>(null) }
     
-    // Image picker launcher
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        selectedImageUri = uri
-        uri?.let {
-            uploadImage(it, context, preferencesManager) { result ->
-                uploadResult = result
-                isUploading = false
-            }
-        }
-    }
-    
     // Function to upload image
     fun uploadImage(uri: Uri, context: android.content.Context, prefsManager: PreferencesManager, callback: (String) -> Unit) {
         isUploading = true
@@ -106,6 +93,19 @@ fun Settings02Screen(
             } catch (e: Exception) {
                 callback("Error: ${e.message ?: "Upload failed"}")
             } finally {
+                isUploading = false
+            }
+        }
+    }
+    
+    // Image picker launcher
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        selectedImageUri = uri
+        uri?.let {
+            uploadImage(it, context, preferencesManager) { result ->
+                uploadResult = result
                 isUploading = false
             }
         }
@@ -207,28 +207,20 @@ fun Settings02Screen(
                             model = user?.image_url ?: selectedImageUri,
                             contentDescription = "Profile Picture",
                             modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop,
-                            error = {
-                                Icon(
-                                    imageVector = Icons.Default.Person,
-                                    contentDescription = "Default Profile",
-                                    tint = PrimaryBlue,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(8.dp)
-                                )
-                            },
-                            placeholder = {
-                                Icon(
-                                    imageVector = Icons.Default.Person,
-                                    contentDescription = "Loading Profile",
-                                    tint = PrimaryBlue,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(8.dp)
-                                )
-                            }
+                            contentScale = ContentScale.Crop
                         )
+                        
+                        // Show default icon if no image
+                        if (user?.image_url == null && selectedImageUri == null) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = "Default Profile",
+                                tint = PrimaryBlue,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(8.dp)
+                            )
+                        }
                         
                         // Camera overlay icon
                         Box(

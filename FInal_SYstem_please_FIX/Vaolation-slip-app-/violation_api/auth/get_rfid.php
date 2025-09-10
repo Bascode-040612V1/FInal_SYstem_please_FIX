@@ -15,8 +15,8 @@ if (!$rfidConn) {
 
 try {
     // Get the latest unused RFID scan from rfid_admin_scans table
-    $query = "SELECT rfid_number FROM rfid_admin_scans 
-              WHERE is_used = 0 
+    $query = "SELECT rfid_number, scanned_at FROM rfid_admin_scans 
+              WHERE (is_used = 0 OR is_used IS NULL)
               ORDER BY scanned_at DESC 
               LIMIT 1";
     $stmt = $rfidConn->prepare($query);
@@ -24,13 +24,18 @@ try {
     
     if ($stmt->rowCount() > 0) {
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
-        sendResponse(true, "RFID number retrieved successfully", $result['rfid_number']);
+        $data = [
+            'rfid_number' => $result['rfid_number'],
+            'scanned_at' => $result['scanned_at'],
+            'status' => 'available'
+        ];
+        sendResponse(true, "RFID number retrieved successfully", $data);
     } else {
-        sendResponse(false, "No unused RFID scans available");
+        sendResponse(false, "No unused RFID scans available. Please scan your RFID card first.");
     }
     
 } catch(PDOException $exception) {
     error_log("RFID fetch error: " . $exception->getMessage());
-    sendResponse(false, "Failed to retrieve RFID number");
+    sendResponse(false, "Failed to retrieve RFID number: " . $exception->getMessage());
 }
 ?>

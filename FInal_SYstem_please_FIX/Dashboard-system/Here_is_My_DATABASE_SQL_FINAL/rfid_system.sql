@@ -31,14 +31,15 @@ CREATE TABLE `admins` (
   `id` int(11) NOT NULL,
   `username` varchar(50) NOT NULL,
   `rfid` varchar(50) NOT NULL,
-  `password` varchar(255) NOT NULL
+  `password` varchar(255) NOT NULL,
+`image` varchar(255) DEFAULT 'assets/default-profile.png'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `admins`
 --
 
-INSERT INTO `admins` (`id`, `username`, `rfid`, `password`) VALUES
+INSERT INTO `admins` (`id`, `username`, `rfid`, `password, `image`) VALUES
 (2, 'ajJ', '3870770196', '12345678'),
 (3, 'Guard', '3870770197', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi');
 

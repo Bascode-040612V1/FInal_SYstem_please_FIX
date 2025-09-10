@@ -18,7 +18,6 @@ $username = validateInput($data->username, 'string', 50);
 $email = validateInput($data->email, 'email');
 $password = validateInput($data->password, 'string', 128);
 $role = validateInput($data->role ?? 'guard', 'string', 20);
-$rfid = isset($data->rfid) ? validateInput($data->rfid, 'string', 50) : null;
 
 if (!$username || !$email || !$password) {
     sendResponse(false, "Invalid input format");
@@ -26,12 +25,21 @@ if (!$username || !$email || !$password) {
 
 $database = new Database();
 $conn = $database->getViolationConnection();
+$rfidConn = $database->getRfidConnection();
 
 if (!$conn) {
     sendResponse(false, "Database connection failed");
 }
 
+if (!$rfidConn) {
+    sendResponse(false, "RFID database connection failed");
+}
+
 try {
+    // Start transaction for both databases
+    $conn->beginTransaction();
+    $rfidConn->beginTransaction();
+    
     // Check if user already exists
     $query = "SELECT id FROM users WHERE email = :email OR username = :username";
     $stmt = $conn->prepare($query);
@@ -40,7 +48,30 @@ try {
     $stmt->execute();
 
     if ($stmt->rowCount() > 0) {
+        $conn->rollBack();
+        $rfidConn->rollBack();
         sendResponse(false, "User with this email or username already exists");
+    }
+
+    // Get the latest unused RFID from rfid_admin_scans
+    $rfidQuery = "SELECT rfid_number, id FROM rfid_admin_scans 
+                  WHERE is_used = 0 OR is_used IS NULL 
+                  ORDER BY scanned_at DESC 
+                  LIMIT 1";
+    $rfidStmt = $rfidConn->prepare($rfidQuery);
+    $rfidStmt->execute();
+    
+    $rfid = null;
+    $rfid_scan_id = null;
+    
+    if ($rfidStmt->rowCount() > 0) {
+        $rfidResult = $rfidStmt->fetch(PDO::FETCH_ASSOC);
+        $rfid = $rfidResult['rfid_number'];
+        $rfid_scan_id = $rfidResult['id'];
+    } else {
+        $conn->rollBack();
+        $rfidConn->rollBack();
+        sendResponse(false, "No RFID available for registration. Please scan your RFID card first.");
     }
 
     // Hash password securely
@@ -59,30 +90,41 @@ try {
     if ($stmt->execute()) {
         $user_id = $conn->lastInsertId();
         
-        // Store RFID in admins table in rfid_system database if RFID is provided
-        if ($rfid) {
-            $rfidConn = $database->getRfidConnection();
-            if ($rfidConn) {
-                try {
-                    // Insert into admins table in rfid_system database
-                    $adminQuery = "INSERT INTO admins (username, rfid, password) VALUES (:username, :rfid, :password)";
-                    $adminStmt = $rfidConn->prepare($adminQuery);
-                    $adminStmt->bindParam(":username", $username);
-                    $adminStmt->bindParam(":rfid", $rfid);
-                    $adminStmt->bindParam(":password", $hashed_password);
-                    $adminStmt->execute();
-                    
-                    // Mark RFID as used in rfid_admin_scans
-                    $updateRfidQuery = "UPDATE rfid_admin_scans SET is_used = 1, admin_username = :username WHERE rfid_number = :rfid AND is_used = 0";
-                    $updateRfidStmt = $rfidConn->prepare($updateRfidQuery);
-                    $updateRfidStmt->bindParam(":username", $username);
-                    $updateRfidStmt->bindParam(":rfid", $rfid);
-                    $updateRfidStmt->execute();
-                } catch(PDOException $rfid_exception) {
-                    error_log("RFID registration error: " . $rfid_exception->getMessage());
-                }
-            }
-        }
+        // Insert into admins table in rfid_system database
+        $adminQuery = "INSERT INTO admins (username, rfid, password, image) VALUES (:username, :rfid, :password, :image)";
+        $adminStmt = $rfidConn->prepare($adminQuery);
+        $adminStmt->bindParam(":username", $username);
+        $adminStmt->bindParam(":rfid", $rfid);
+        $adminStmt->bindParam(":password", $hashed_password);
+        $default_image = 'assets/default-profile.png';
+        $adminStmt->bindParam(":image", $default_image);
+        $adminStmt->execute();
+        
+        // Mark the used RFID as used
+        $updateRfidQuery = "UPDATE rfid_admin_scans SET is_used = 1, admin_username = :username WHERE id = :id";
+        $updateRfidStmt = $rfidConn->prepare($updateRfidQuery);
+        $updateRfidStmt->bindParam(":username", $username);
+        $updateRfidStmt->bindParam(":id", $rfid_scan_id);
+        $updateRfidStmt->execute();
+        
+        // Clean up old RFID entries (keep the latest one - the one we just used)
+        $cleanupQuery = "DELETE FROM rfid_admin_scans 
+                        WHERE is_used = 1 
+                        AND id != :keep_id 
+                        AND scanned_at < (
+                            SELECT scanned_at FROM (
+                                SELECT scanned_at FROM rfid_admin_scans 
+                                WHERE id = :keep_id_sub
+                            ) as temp
+                        )";
+        $cleanupStmt = $rfidConn->prepare($cleanupQuery);
+        $cleanupStmt->bindParam(":keep_id", $rfid_scan_id);
+        $cleanupStmt->bindParam(":keep_id_sub", $rfid_scan_id);
+        $cleanupStmt->execute();
+        
+        // Commit both transactions
+        $conn->commit();
+        $rfidConn->commit();
         
         $user_data = array(
             "id" => $user_id,
@@ -94,11 +136,15 @@ try {
 
         sendResponse(true, "Registration successful", $user_data);
     } else {
+        $conn->rollBack();
+        $rfidConn->rollBack();
         sendResponse(false, "Registration failed");
     }
 
 } catch(PDOException $exception) {
+    $conn->rollBack();
+    $rfidConn->rollBack();
     error_log("Registration error: " . $exception->getMessage());
-    sendResponse(false, "Registration failed");
+    sendResponse(false, "Registration failed: " . $exception->getMessage());
 }
 ?>

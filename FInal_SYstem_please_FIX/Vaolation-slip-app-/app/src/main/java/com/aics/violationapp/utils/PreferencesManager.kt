@@ -14,6 +14,8 @@ class PreferencesManager(context: Context) {
         private const val KEY_USERNAME = "username"
         private const val KEY_EMAIL = "email"
         private const val KEY_ROLE = "role"
+        private const val KEY_IMAGE = "image"
+        private const val KEY_IMAGE_URL = "image_url"
         private const val KEY_BASE_URL = "base_url"
         private const val KEY_IP_ADDRESS = "ip_address"
         private const val KEY_PORT = "port"
@@ -28,6 +30,8 @@ class PreferencesManager(context: Context) {
             putString(KEY_USERNAME, user.username)
             putString(KEY_EMAIL, user.email)
             putString(KEY_ROLE, user.role)
+            putString(KEY_IMAGE, user.image)
+            putString(KEY_IMAGE_URL, user.image_url)
             apply()
         }
     }
@@ -38,7 +42,9 @@ class PreferencesManager(context: Context) {
                 id = sharedPreferences.getInt(KEY_USER_ID, 0),
                 username = sharedPreferences.getString(KEY_USERNAME, "") ?: "",
                 email = sharedPreferences.getString(KEY_EMAIL, "") ?: "",
-                role = sharedPreferences.getString(KEY_ROLE, "guard") ?: "guard"
+                role = sharedPreferences.getString(KEY_ROLE, "guard") ?: "guard",
+                image = sharedPreferences.getString(KEY_IMAGE, null),
+                image_url = sharedPreferences.getString(KEY_IMAGE_URL, null)
             )
         } else null
     }
@@ -54,6 +60,8 @@ class PreferencesManager(context: Context) {
             remove(KEY_USERNAME)
             remove(KEY_EMAIL)
             remove(KEY_ROLE)
+            remove(KEY_IMAGE)
+            remove(KEY_IMAGE_URL)
             apply()
         }
     }

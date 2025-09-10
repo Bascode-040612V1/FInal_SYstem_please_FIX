@@ -6,7 +6,9 @@ data class User(
     val email: String = "",
     val password: String = "",
     val role: String = "guard",
-    val rfid: String? = null
+    val rfid: String? = null,
+    val image: String? = null,
+    val image_url: String? = null
 )
 
 data class LoginRequest(

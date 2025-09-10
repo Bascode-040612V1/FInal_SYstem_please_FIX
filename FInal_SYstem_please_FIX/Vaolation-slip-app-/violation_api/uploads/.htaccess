@@ -1,0 +1,12 @@
+# Protect uploads directory
+Options -Indexes
+<Files ~ "\.(php|phtml|php3|php4|php5|pl|py|jsp|asp|sh|cgi)$">
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Allow only image files
+<FilesMatch "\.(jpg|jpeg|png|gif|bmp|webp)$">
+    Order allow,deny
+    Allow from all
+</FilesMatch>

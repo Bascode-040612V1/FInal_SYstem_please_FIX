@@ -8,6 +8,14 @@ import com.aics.violationapp.data.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import android.util.Log
+import android.content.Context
+import android.net.Uri
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
+import java.io.FileOutputStream
 
 class ViolationRepository(
     private val apiService: ApiService,
@@ -217,6 +225,56 @@ class ViolationRepository(
                 Result.success(response.body()?.data ?: "Connection successful")
             } else {
                 Result.failure(Exception(response.body()?.message ?: "Connection failed"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    suspend fun uploadAdminImage(uri: Uri, context: Context, userId: Int): Result<User> = withContext(Dispatchers.IO) {
+        try {
+            // Create a temporary file from URI
+            val inputStream = context.contentResolver.openInputStream(uri)
+            val tempFile = File.createTempFile("admin_image", ".jpg", context.cacheDir)
+            
+            inputStream?.use { input ->
+                FileOutputStream(tempFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            
+            // Create multipart request body
+            val requestFile = tempFile.asRequestBody("image/*".toMediaTypeOrNull())
+            val imagePart = MultipartBody.Part.createFormData("image", tempFile.name, requestFile)
+            val adminIdPart = userId.toString().toRequestBody("text/plain".toMediaTypeOrNull())
+            
+            // Upload image
+            val response = apiService.uploadAdminImage(adminIdPart, imagePart)
+            
+            // Clean up temp file
+            tempFile.delete()
+            
+            if (response.isSuccessful && response.body()?.success == true) {
+                response.body()?.data?.let { user ->
+                    Result.success(user)
+                } ?: Result.failure(Exception("User data is null"))
+            } else {
+                Result.failure(Exception(response.body()?.message ?: "Upload failed"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    suspend fun getAdminProfile(userId: Int): Result<User> = withContext(Dispatchers.IO) {
+        try {
+            val response = apiService.getAdminProfile(userId)
+            if (response.isSuccessful && response.body()?.success == true) {
+                response.body()?.data?.let { user ->
+                    Result.success(user)
+                } ?: Result.failure(Exception("User data is null"))
+            } else {
+                Result.failure(Exception(response.body()?.message ?: "Failed to get profile"))
             }
         } catch (e: Exception) {
             Result.failure(e)

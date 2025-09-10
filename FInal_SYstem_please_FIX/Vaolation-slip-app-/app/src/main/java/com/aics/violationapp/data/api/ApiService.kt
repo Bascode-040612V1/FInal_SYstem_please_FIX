@@ -1,6 +1,8 @@
 package com.aics.violationapp.data.api
 
 import com.aics.violationapp.data.model.*
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -32,4 +34,16 @@ interface ApiService {
     
     @GET("test/connection.php")
     suspend fun testConnection(): Response<ApiResponse<String>>
+    
+    @Multipart
+    @POST("admin/upload_admin_image.php")
+    suspend fun uploadAdminImage(
+        @Part("admin_id") adminId: RequestBody,
+        @Part image: MultipartBody.Part
+    ): Response<ApiResponse<User>>
+    
+    @GET("admin/get_admin_profile.php")
+    suspend fun getAdminProfile(
+        @Query("admin_id") adminId: Int
+    ): Response<ApiResponse<User>>
 }

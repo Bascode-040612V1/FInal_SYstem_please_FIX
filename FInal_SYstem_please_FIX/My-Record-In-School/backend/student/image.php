@@ -62,12 +62,12 @@ function uploadStudentImage($student_id, $uploaded_file) {
         
         // Update both databases
         $queries = [
-            "UPDATE student_violation_db.students SET image = ? WHERE student_id = ?",
-            "UPDATE rfid_system.students SET image = ? WHERE student_number = ?"
+            [$database->getViolationsConnection(), "UPDATE student_violation_db.students SET image = ? WHERE student_id = ?"],
+            [$database->getRfidConnection(), "UPDATE rfid_system.students SET image = ? WHERE student_number = ?"]
         ];
         
-        foreach ($queries as $query) {
-            $stmt = $database->getConnection()->prepare($query);
+        foreach ($queries as [$conn, $query]) {
+            $stmt = $conn->prepare($query);
             $stmt->execute([$db_path, $student_id]);
         }
         
@@ -92,14 +92,15 @@ function getStudentImage($student_id) {
     
     try {
         $query = "SELECT image FROM student_violation_db.students WHERE student_id = ?";
-        $stmt = $database->getConnection()->prepare($query);
+        $stmt = $database->getViolationsConnection()->prepare($query);
         $stmt->execute([$student_id]);
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if ($result) {
             return [
                 'success' => true,
-                'image_path' => $result['image']
+                'image_path' => $result['image'],
+                'image_url' => $result['image'] ? "http://" . $_SERVER['HTTP_HOST'] . "/backend/uploads/" . basename($result['image']) : null
             ];
         } else {
             return [

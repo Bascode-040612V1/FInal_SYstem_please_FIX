@@ -22,11 +22,15 @@ class SyncManager(private val application: Application) {
     private val database = AppDatabase.getDatabase(application)
     private val violationRepository = ViolationRepository(database.violationDao())
     private val attendanceRepository = AttendanceRepository(database.attendanceDao())
-    private val imageCacheRepository = ImageCacheRepository(
-        context = application,
-        studentDao = database.studentDao(),
-        studentApi = RetrofitClient.getStudentApi(appPreferences.getAppConfig().baseUrl)
-    )
+    
+    // Lazy initialization to avoid circular dependency issues
+    private val imageCacheRepository by lazy {
+        ImageCacheRepository(
+            context = application,
+            studentDao = database.studentDao(),
+            studentApi = RetrofitClient.getStudentApi(appPreferences.getAppConfig().baseUrl)
+        )
+    }
     
     private val _syncStatus = MutableStateFlow(SyncStatus())
     val syncStatus: StateFlow<SyncStatus> = _syncStatus.asStateFlow()

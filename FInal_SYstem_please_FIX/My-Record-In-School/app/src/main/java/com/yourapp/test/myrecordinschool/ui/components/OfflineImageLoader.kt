@@ -18,7 +18,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
@@ -45,7 +45,7 @@ fun OfflineImageLoader(
             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
         )
     },
-    viewModel: OfflineImageViewModel = hiltViewModel()
+    viewModel: OfflineImageViewModel = viewModel { OfflineImageViewModel(context) }
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()

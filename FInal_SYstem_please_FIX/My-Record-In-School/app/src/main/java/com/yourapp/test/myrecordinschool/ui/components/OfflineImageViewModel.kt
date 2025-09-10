@@ -1,19 +1,27 @@
 package com.yourapp.test.myrecordinschool.ui.components
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.yourapp.test.myrecordinschool.data.api.RetrofitClient
+import com.yourapp.test.myrecordinschool.data.preferences.AppPreferences
+import com.yourapp.test.myrecordinschool.roomdb.AppDatabase
 import com.yourapp.test.myrecordinschool.roomdb.repository.ImageCacheRepository
-import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import javax.inject.Inject
 
-@HiltViewModel
-class OfflineImageViewModel @Inject constructor(
-    private val imageCacheRepository: ImageCacheRepository
-) : ViewModel() {
+class OfflineImageViewModel(context: Context) : ViewModel() {
+
+    private val appPreferences = AppPreferences(context)
+    private val database = AppDatabase.getDatabase(context)
+    private val studentApi = RetrofitClient.getStudentApi(appPreferences.getAppConfig().baseUrl)
+    private val imageCacheRepository = ImageCacheRepository(
+        context = context,
+        studentDao = database.studentDao(),
+        studentApi = studentApi
+    )
 
     /**
      * Get cached image file for student

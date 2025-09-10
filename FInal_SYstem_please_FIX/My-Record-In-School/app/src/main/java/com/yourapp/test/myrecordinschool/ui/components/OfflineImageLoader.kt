@@ -1,6 +1,7 @@
 package com.yourapp.test.myrecordinschool.ui.components
 
 import android.graphics.BitmapFactory
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -44,60 +45,66 @@ fun OfflineImageLoader(
             modifier = Modifier.size(size * 0.6f),
             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
         )
-    },
-    viewModel: OfflineImageViewModel = viewModel { OfflineImageViewModel(context) }
+    }
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val viewModel: OfflineImageViewModel = viewModel { OfflineImageViewModel(context) }
     
     var imageState by remember { mutableStateOf<ImageState>(ImageState.Loading) }
     var cachedImageBitmap by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
 
     // Load cached image on composition
-    LaunchedEffect(studentId) {
-        scope.launch {
-            try {
-                val cachedFile = viewModel.getCachedImage(studentId)
-                if (cachedFile != null && cachedFile.exists()) {
-                    // Load cached image
-                    val bitmap = withContext(Dispatchers.IO) {
+    LaunchedEffect(studentId, imageUrl) {
+        try {
+            val cachedFile = viewModel.getCachedImage(studentId)
+            if (cachedFile != null && cachedFile.exists()) {
+                // Load cached image
+                val bitmap = withContext(Dispatchers.IO) {
+                    try {
                         BitmapFactory.decodeFile(cachedFile.absolutePath)
+                    } catch (e: Exception) {
+                        Log.w("OfflineImageLoader", "Failed to decode cached image: ${cachedFile.absolutePath}", e)
+                        null
                     }
-                    if (bitmap != null) {
-                        cachedImageBitmap = bitmap.asImageBitmap()
-                        imageState = ImageState.CachedSuccess
-                    } else {
-                        imageState = ImageState.Error
-                    }
+                }
+                if (bitmap != null) {
+                    cachedImageBitmap = bitmap.asImageBitmap()
+                    imageState = ImageState.CachedSuccess
                 } else {
-                    // No cached image, try to download if URL provided
-                    if (!imageUrl.isNullOrEmpty()) {
-                        imageState = ImageState.Loading
-                        scope.launch {
-                            val success = viewModel.downloadAndCacheImage(studentId, imageUrl)
-                            if (success) {
-                                // Reload cached image after download
-                                val newCachedFile = viewModel.getCachedImage(studentId)
-                                if (newCachedFile?.exists() == true) {
-                                    val bitmap = withContext(Dispatchers.IO) {
-                                        BitmapFactory.decodeFile(newCachedFile.absolutePath)
-                                    }
-                                    if (bitmap != null) {
-                                        cachedImageBitmap = bitmap.asImageBitmap()
-                                        imageState = ImageState.Success
-                                    }
+                    imageState = ImageState.Error
+                }
+            } else {
+                // No cached image, try to download if URL provided
+                if (!imageUrl.isNullOrEmpty()) {
+                    imageState = ImageState.Loading
+                    val success = viewModel.downloadAndCacheImage(studentId, imageUrl)
+                    if (success) {
+                        // Reload cached image after download
+                        val newCachedFile = viewModel.getCachedImage(studentId)
+                        if (newCachedFile?.exists() == true) {
+                            val bitmap = withContext(Dispatchers.IO) {
+                                try {
+                                    BitmapFactory.decodeFile(newCachedFile.absolutePath)
+                                } catch (e: Exception) {
+                                    Log.w("OfflineImageLoader", "Failed to decode newly cached image: ${newCachedFile.absolutePath}", e)
+                                    null
                                 }
-                            } else {
-                                imageState = ImageState.Error
+                            }
+                            if (bitmap != null) {
+                                cachedImageBitmap = bitmap.asImageBitmap()
+                                imageState = ImageState.Success
                             }
                         }
                     } else {
                         imageState = ImageState.Error
                     }
+                } else {
+                    imageState = ImageState.Error
                 }
-            } catch (e: Exception) {
-                imageState = ImageState.Error
             }
+        } catch (e: Exception) {
+            Log.e("OfflineImageLoader", "Error loading image for student: $studentId", e)
+            imageState = ImageState.Error
         }
     }
 
@@ -158,8 +165,7 @@ fun OfflineImageLoader(
                         contentDescription = contentDescription,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
-                        error = rememberVectorPainter(Icons.Default.Person),
-                        onError = { fallbackIcon() }
+                        error = rememberVectorPainter(Icons.Default.Person)
                     )
                 } else {
                     fallbackIcon()

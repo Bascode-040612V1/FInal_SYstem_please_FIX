@@ -43,9 +43,10 @@ A **high-performance**, comprehensive mobile application for managing student di
 
 #### ⚙️ Settings & Configuration
 - **Settings01**: IP and port configuration for XAMPP server
-- **Settings02**: Student profile management and information updates
+- **Settings02**: Student profile management with offline profile images
 - Database connection testing
 - Network status monitoring
+- **Profile Image Management**: Upload and view profile pictures offline
 - Logout functionality
 
 ### 🎨 Design Features
@@ -56,6 +57,8 @@ A **high-performance**, comprehensive mobile application for managing student di
 - **Smooth Animations**: Engaging user experience
 - **Loading States**: Professional loading indicators and error handling
 - **Sync Status Indicators**: Real-time sync and network status display
+- **🖼️ Profile Images**: Offline-first profile image display with automatic caching
+- **Fallback Icons**: Elegant default icons when profile images are unavailable
 
 ### 🌐 Backend Integration & Offline Support
 - **Offline-First Architecture**: App works completely without internet
@@ -65,6 +68,8 @@ A **high-performance**, comprehensive mobile application for managing student di
 - **Conflict Resolution**: Smart data merging and error recovery
 - **Network State Detection**: Automatic online/offline mode switching
 - **Coroutines**: Asynchronous data operations
+- **🖼️ Offline Image Caching**: Profile images cached locally for offline viewing
+- **Image Sync Management**: Automatic background image downloading and caching
 - **XAMPP Integration**: Connects to local XAMPP server
 - **Dual Database Support**: 
   - `student_violation_db`: For violations data
@@ -96,6 +101,8 @@ A **high-performance**, comprehensive mobile application for managing student di
 - **SharedPreferences**: App settings and user preferences
 - **Room Database**: Complete offline data storage
 - **Automatic Sync**: Background data synchronization
+- **🖼️ Image Cache Repository**: Local profile image storage and management
+- **File System Integration**: Efficient image file handling with compression
 
 ## App Structure
 
@@ -109,12 +116,12 @@ app/
 ├── navigation/             # Navigation setup
 ├── roomdb/
 │   ├── dao/                # Data Access Objects with student filtering
-│   ├── entity/             # Room database entities
-│   ├── repository/         # Repository pattern implementation
-│   ├── AppDatabase.kt      # Room database configuration
+│   ├── entity/             # Room database entities (including StudentEntity)
+│   ├── repository/         # Repository pattern implementation + ImageCacheRepository
+│   ├── AppDatabase.kt      # Room database configuration (v2 with image support)
 │   └── DatabaseProvider.kt # Database instance provider
 ├── ui/
-│   ├── components/         # Reusable UI components (LoadingComponents, etc.)
+│   ├── components/         # Reusable UI components (LoadingComponents, OfflineImageLoader, ProfileImage)
 │   ├── screen/            # App screens with enhanced loading states
 │   └── theme/             # Colors, typography, themes
 └── viewmodel/             # Business logic with DataState management
@@ -181,6 +188,7 @@ app/
 - course: Course/Strand
 - section: Class section
 - created_at: Registration timestamp
+- image: Profile image path (for image upload/retrieval)
 ```
 
 #### Violations Table (student_violation_db)
@@ -217,6 +225,10 @@ The app expects these PHP endpoints:
 - `POST /auth/register.php`
 - `PUT /student/update.php`
 
+### Student Images
+- `POST /student/image.php` - Upload profile image
+- `GET /student/image.php?student_id={id}` - Get profile image URL
+
 ### Violations
 - `GET /violations/{student_id}`
 - `PUT /violations/acknowledge/{id}`
@@ -249,6 +261,7 @@ The app expects these PHP endpoints:
 - **IP Configuration**: Easy server setup with connection testing
 - **Network Monitoring**: Real-time network status display
 - **Profile Updates**: Change academic information with sync
+- **🖼️ Profile Image Upload**: Upload and manage profile pictures with offline caching
 - **Offline Indicator**: Clear offline/online mode display
 
 ### Sync & Offline Features
@@ -260,6 +273,19 @@ The app expects these PHP endpoints:
 - **Loading States**: Professional loading indicators and error handling
 
 ## New Features (Latest Version)
+
+### 🖼️ **Offline Profile Image Caching** ✨ NEW!
+- **Offline-First Image Display**: Profile images cached locally and viewable without internet
+- **Automatic Background Sync**: Images downloaded and cached automatically during sync operations
+- **Smart Cache Management**: 24-hour cache timeout with automatic cleanup after 7 days
+- **Instant Loading**: Cached images display immediately without loading delays
+- **Fallback Strategy**: Elegant default icons when images are unavailable
+- **Integration Points**:
+  - **Violation Details**: Student profile images in violation detail screens
+  - **Settings Profile**: Current user profile image with upload functionality
+  - **Background Operations**: Non-blocking image sync with existing data operations
+- **Storage Optimization**: JPEG compression at 85% quality for efficient storage
+- **Visual Cache Indicators**: Debug indicators showing cached vs. network images
 
 ### 🔄 Complete Offline Support
 - **Works Without Internet**: Full app functionality available offline
@@ -287,6 +313,8 @@ The app expects these PHP endpoints:
 
 - [ ] Push notifications for new violations
 - [x] ~~Offline data synchronization~~ ✅ **Implemented**
+- [x] ~~Offline profile image caching~~ ✅ **Implemented**
+- [ ] Bulk image download for complete offline experience
 - [ ] Export attendance reports
 - [ ] Parent/guardian access
 - [ ] Biometric login
@@ -296,6 +324,8 @@ The app expects these PHP endpoints:
 - [x] ~~Background sync~~ ✅ **Implemented**
 - [ ] Data export functionality
 - [ ] Advanced analytics dashboard
+- [ ] Image compression settings
+- [ ] Cache size management
 
 ## Architecture Highlights
 
@@ -306,16 +336,20 @@ The app expects these PHP endpoints:
 - **Offline-First**: Local data prioritized with network sync
 
 ### Room Database Integration
-- **Complete Offline Storage**: All violations and attendance cached locally
+- **Complete Offline Storage**: All violations, attendance, and student data cached locally
 - **Student-Specific Queries**: Secure data filtering by student ID
 - **Automatic Sync**: Background synchronization with conflict resolution
 - **Performance Optimized**: Efficient queries and data structures
+- **🖼️ Image Cache Schema**: StudentEntity with image caching metadata
+- **Database Migration**: Seamless upgrade from v1 to v2 with image support
 
 ### Sync Management
 - **SyncManager**: Centralized synchronization logic
 - **Network Awareness**: Automatic online/offline detection
 - **Retry Logic**: Robust error handling and recovery
 - **Conflict Resolution**: Smart data merging strategies
+- **🖼️ Image Sync Integration**: Background profile image downloading and caching
+- **Non-blocking Operations**: Image sync doesn't interfere with critical data operations
 
 ## Contributing
 
@@ -333,12 +367,23 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 For issues and questions:
 1. Check the documentation
-2. Search existing issues
-3. Create a new issue with detailed information
+2. Review the [Offline Image Caching Documentation](docs/OFFLINE_IMAGE_CACHING.md) for image-related features
+3. Search existing issues
+4. Create a new issue with detailed information
 
 ## Version History
 
-### v2.0.0 (Current - Enhanced)
+### v2.1.0 (Current - Enhanced with Image Caching)
+- ✅ **Offline Profile Image Caching**: Complete offline-first image display system
+- ✅ **Enhanced Image Management**: Upload, cache, and view profile pictures offline
+- ✅ **Smart Image Sync**: Background image downloading integrated with data sync
+- ✅ **Storage Optimization**: JPEG compression and automatic cache cleanup
+- ✅ **Visual Cache Indicators**: Debug support for image cache status
+- ✅ **Database Schema v2**: StudentEntity with image caching metadata
+- ✅ **Non-blocking Image Operations**: Image sync doesn't affect critical operations
+- ✅ **Fallback Strategy**: Elegant default icons and error recovery
+
+### v2.0.0 (Enhanced)
 - ✅ **Complete Offline Functionality**: Full app works without internet
 - ✅ **Room Database Integration**: Complete local data persistence
 - ✅ **Enhanced Loading States**: Professional loading indicators and error handling

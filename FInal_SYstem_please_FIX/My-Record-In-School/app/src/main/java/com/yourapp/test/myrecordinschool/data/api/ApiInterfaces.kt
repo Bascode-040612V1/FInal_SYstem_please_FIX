@@ -1,6 +1,8 @@
 package com.yourapp.test.myrecordinschool.data.api
 
 import com.yourapp.test.myrecordinschool.data.model.*
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -16,6 +18,17 @@ interface StudentApi {
     
     @GET("student/{student_id}")
     suspend fun getStudent(@Path("student_id") studentId: String): Response<AuthResponse>
+    
+    // Image upload and retrieval endpoints
+    @Multipart
+    @POST("student/image.php")
+    suspend fun uploadStudentImage(
+        @Part("student_id") studentId: RequestBody,
+        @Part image: MultipartBody.Part
+    ): Response<ImageUploadResponse>
+    
+    @GET("student/image.php")
+    suspend fun getStudentImage(@Query("student_id") studentId: String): Response<ImageUploadResponse>
 }
 
 interface ViolationApi {

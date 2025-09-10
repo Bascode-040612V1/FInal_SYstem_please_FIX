@@ -79,19 +79,49 @@ class ViolationViewModel(application: Application) : AndroidViewModel(applicatio
         }
         
         viewModelScope.launch {
-            // First, load from cache
-            val cachedCount = repository.getViolationCount(studentId)
-            if (cachedCount > 0) {
-                _violationDataState.value = DataState.Cached(
-                    data = emptyList(), // Will be populated by Flow
-                    isStale = shouldRefreshData()
-                )
-            } else {
-                _violationDataState.value = DataState.Loading
+            try {
+                // CRITICAL FIX: Always show cached data first, regardless of network state
+                val cachedCount = repository.getViolationCount(studentId)
+                
+                if (cachedCount > 0) {
+                    // Show cached data immediately for better UX
+                    _violationDataState.value = DataState.Cached(
+                        data = emptyList(), // Will be populated by Flow
+                        isStale = shouldRefreshData()
+                    )
+                    
+                    android.util.Log.d("ViolationViewModel", "Loaded $cachedCount cached violations for offline-first experience")
+                    
+                    // Background sync without blocking UI
+                    viewModelScope.launch {
+                        try {
+                            if (syncManager.networkState.value == NetworkState.Available) {
+                                syncManager.syncViolations(forceRefresh = false)
+                            }
+                        } catch (e: Exception) {
+                            // Silent background sync failure - user still has cached data
+                            android.util.Log.w("ViolationViewModel", "Background sync failed but cached data available", e)
+                        }
+                    }
+                } else {
+                    // No cached data - must attempt initial sync
+                    _violationDataState.value = DataState.Loading
+                    
+                    if (syncManager.networkState.value == NetworkState.Available) {
+                        val success = syncManager.syncViolations(forceRefresh = true)
+                        if (success) {
+                            _violationDataState.value = DataState.Success(emptyList())
+                        } else {
+                            _violationDataState.value = DataState.Error("Unable to load violations. Please check your connection and try again.")
+                        }
+                    } else {
+                        _violationDataState.value = DataState.Error("No cached data available. Please connect to the internet to load violations.")
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ViolationViewModel", "Error in offline-first loading", e)
+                _violationDataState.value = DataState.Error("Error loading violations: ${e.message}")
             }
-            
-            // Then sync from network
-            refreshViolations()
         }
     }
     
@@ -128,18 +158,50 @@ class ViolationViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             _isLoading.value = true
             
-            val success = syncManager.syncViolations(forceRefresh = true)
-            
-            if (success) {
-                _violationDataState.value = DataState.Success(emptyList())
-                _errorMessage.value = ""
-            } else {
-                val errorMsg = when (val syncState = syncManager.syncStatus.value.syncState) {
-                    is SyncState.Error -> syncState.message
-                    else -> "Failed to refresh violations"
+            try {
+                if (syncManager.networkState.value == NetworkState.Available) {
+                    val success = syncManager.syncViolations(forceRefresh = true)
+                    
+                    if (success) {
+                        _violationDataState.value = DataState.Success(emptyList())
+                        _errorMessage.value = ""
+                        android.util.Log.d("ViolationViewModel", "Violations refreshed successfully")
+                    } else {
+                        // Keep showing cached data if available, but indicate sync failed
+                        val studentId = appPreferences.getStudentId()
+                        val cachedCount = studentId?.let { repository.getViolationCount(it) } ?: 0
+                        
+                        if (cachedCount > 0) {
+                            _violationDataState.value = DataState.Cached(
+                                data = emptyList(),
+                                isStale = true
+                            )
+                            _errorMessage.value = "Sync failed but showing cached data. Please try again later."
+                        } else {
+                            _violationDataState.value = DataState.Error("Failed to refresh violations. Please check your connection.")
+                            _errorMessage.value = "Failed to refresh violations"
+                        }
+                    }
+                } else {
+                    // Offline - show cached data if available
+                    val studentId = appPreferences.getStudentId()
+                    val cachedCount = studentId?.let { repository.getViolationCount(it) } ?: 0
+                    
+                    if (cachedCount > 0) {
+                        _violationDataState.value = DataState.Cached(
+                            data = emptyList(),
+                            isStale = true
+                        )
+                        _errorMessage.value = "Offline mode - showing cached data"
+                    } else {
+                        _violationDataState.value = DataState.Error("No internet connection and no cached data available.")
+                        _errorMessage.value = "No internet connection"
+                    }
                 }
-                _violationDataState.value = DataState.Error(errorMsg)
-                _errorMessage.value = errorMsg
+            } catch (e: Exception) {
+                android.util.Log.e("ViolationViewModel", "Error refreshing violations", e)
+                _violationDataState.value = DataState.Error("Error refreshing violations: ${e.message}")
+                _errorMessage.value = "Error refreshing violations"
             }
             
             _isLoading.value = false
@@ -149,20 +211,33 @@ class ViolationViewModel(application: Application) : AndroidViewModel(applicatio
     fun acknowledgeViolation(violationId: Int) {
         viewModelScope.launch {
             try {
-                // Update local database immediately for better UX
+                // CRITICAL FIX: Update local database immediately for offline-first experience
                 repository.updateAcknowledgment(violationId, 1)
+                android.util.Log.d("ViolationViewModel", "Violation $violationId acknowledged locally")
                 
-                // Sync with backend
-                val success = syncManager.syncAcknowledgment(violationId)
-                
-                if (!success) {
-                    // Revert local change if sync failed
-                    repository.updateAcknowledgment(violationId, 0)
-                    _errorMessage.value = "Failed to acknowledge violation. Please try again."
+                // Attempt background sync without blocking UI
+                viewModelScope.launch {
+                    try {
+                        if (syncManager.networkState.value == NetworkState.Available) {
+                            val success = syncManager.syncAcknowledgment(violationId)
+                            if (success) {
+                                android.util.Log.d("ViolationViewModel", "Violation $violationId acknowledged on server")
+                            } else {
+                                android.util.Log.w("ViolationViewModel", "Failed to sync acknowledgment to server, but local update preserved")
+                                // Note: We don't revert the local change as this would create poor UX
+                                // The sync will be retried in the next sync cycle
+                            }
+                        } else {
+                            android.util.Log.d("ViolationViewModel", "Offline - acknowledgment will sync when connection is restored")
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("ViolationViewModel", "Background acknowledgment sync failed, will retry later", e)
+                        // Don't show error to user as local operation succeeded
+                    }
                 }
             } catch (e: Exception) {
                 _errorMessage.value = "Error acknowledging violation: ${e.message}"
-                android.util.Log.e("ViolationViewModel", "Error acknowledging violation", e)
+                android.util.Log.e("ViolationViewModel", "Error acknowledging violation locally", e)
             }
         }
     }

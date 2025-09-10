@@ -30,6 +30,7 @@ class AppPreferences(context: Context) {
         private const val KEY_SYNC_PAGE_SIZE = "sync_page_size"
         private const val KEY_AUTO_CLEANUP_ENABLED = "auto_cleanup_enabled"
         private const val KEY_LAST_CLEANUP_TIME = "last_cleanup_time"
+    private const val KEY_PENDING_ACKNOWLEDGMENTS = "pending_acknowledgments"
     }
     
     // App Configuration
@@ -197,5 +198,29 @@ class AppPreferences(context: Context) {
         val lastCleanup = getLastCleanupTime()
         val cleanupInterval = 7 * 24 * 60 * 60 * 1000L // 7 days
         return (System.currentTimeMillis() - lastCleanup) > cleanupInterval
+    }
+    
+    // Pending acknowledgments for offline support
+    fun setPendingAcknowledgments(acknowledgments: Set<Int>) {
+        val acknowledgementsString = acknowledgments.joinToString(",")
+        sharedPreferences.edit()
+            .putString(KEY_PENDING_ACKNOWLEDGMENTS, acknowledgementsString)
+            .apply()
+    }
+    
+    fun getPendingAcknowledgments(): Set<Int> {
+        val acknowledgementsString = sharedPreferences.getString(KEY_PENDING_ACKNOWLEDGMENTS, "") ?: ""
+        if (acknowledgementsString.isEmpty()) {
+            return emptySet()
+        }
+        return acknowledgementsString.split(",")
+            .mapNotNull { it.toIntOrNull() }
+            .toSet()
+    }
+    
+    fun clearPendingAcknowledgments() {
+        sharedPreferences.edit()
+            .remove(KEY_PENDING_ACKNOWLEDGMENTS)
+            .apply()
     }
 }

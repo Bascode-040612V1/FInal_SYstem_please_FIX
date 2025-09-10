@@ -9,7 +9,8 @@ data class Student(
     val course: String = "",
     val section: String = "",
     val created_at: String = "",
-    val updated_at: String = ""
+    val updated_at: String = "",
+    val image: String = "assets/default-profile.png"
 )
 
 data class LoginRequest(
@@ -38,4 +39,12 @@ data class AuthResponse(
     val success: Boolean,
     val message: String,
     val student: Student? = null
+)
+
+data class ImageUploadResponse(
+    val success: Boolean,
+    val message: String,
+    val image_path: String? = null,
+    val image_url: String? = null,
+    val filename: String? = null
 )

@@ -33,6 +33,7 @@ import com.yourapp.test.myrecordinschool.data.preferences.AppPreferences
 import com.yourapp.test.myrecordinschool.ui.components.CustomButton
 import com.yourapp.test.myrecordinschool.ui.components.CustomDropdownField
 import com.yourapp.test.myrecordinschool.ui.components.CustomTextField
+import com.yourapp.test.myrecordinschool.ui.components.ProfileImage
 import com.yourapp.test.myrecordinschool.ui.theme.Blue40
 import com.yourapp.test.myrecordinschool.viewmodel.AuthState
 import com.yourapp.test.myrecordinschool.viewmodel.AuthViewModel
@@ -254,74 +255,41 @@ private fun StudentDataCard(student: Student) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Profile Picture with Upload Functionality
+                // Profile Picture - using offline-first ProfileImage with upload overlay
                 Box(
                     modifier = Modifier.size(80.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (profileImageUri != null) {
-                        AsyncImage(
-                            model = profileImageUri,
-                            contentDescription = "Profile Picture",
-                            modifier = Modifier
-                                .size(80.dp)
-                                .clip(CircleShape)
-                                .border(
-                                    2.dp,
-                                    MaterialTheme.colorScheme.primary,
-                                    CircleShape
-                                )
-                                .clickable { imagePickerLauncher.launch("image/*") },
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Card(
-                            modifier = Modifier
-                                .size(80.dp)
-                                .clickable { imagePickerLauncher.launch("image/*") },
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer
-                            ),
-                            shape = CircleShape
+                    ProfileImage(
+                        studentId = student.student_id,
+                        imageUrl = null, // Will load from backend automatically
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clickable { imagePickerLauncher.launch("image/*") },
+                        size = 80.dp,
+                        contentDescription = "${student.name} Profile Picture"
+                    )
+                    
+                    // Upload indicator overlay
+                    Card(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .align(Alignment.BottomEnd),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        ),
+                        shape = CircleShape
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Person,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(32.dp),
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                }
-                            }
-                        }
-                        
-                        // Upload indicator
-                        Card(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .offset(x = 28.dp, y = 28.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primary
-                            ),
-                            shape = CircleShape
-                        ) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Add,
-                                    contentDescription = "Upload Photo",
-                                    modifier = Modifier.size(16.dp),
-                                    tint = MaterialTheme.colorScheme.onPrimary
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Filled.PhotoCamera,
+                                contentDescription = "Upload Photo",
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onPrimary
+                            )
                         }
                     }
                 }
@@ -340,14 +308,12 @@ private fun StudentDataCard(student: Student) {
                     )
                     
                     // Upload hint
-                    if (profileImageUri == null) {
-                        Text(
-                            text = "Tap to upload photo",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                    }
+                    Text(
+                        text = "Tap to upload photo",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
                 }
             }
             

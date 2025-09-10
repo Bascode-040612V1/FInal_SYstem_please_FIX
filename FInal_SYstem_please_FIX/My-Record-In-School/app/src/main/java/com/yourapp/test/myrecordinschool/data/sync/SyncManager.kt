@@ -9,6 +9,7 @@ import com.yourapp.test.myrecordinschool.roomdb.AppDatabase
 import com.yourapp.test.myrecordinschool.roomdb.entity.AttendanceEntity
 import com.yourapp.test.myrecordinschool.roomdb.entity.ViolationEntity
 import com.yourapp.test.myrecordinschool.roomdb.repository.AttendanceRepository
+import com.yourapp.test.myrecordinschool.roomdb.repository.ImageCacheRepository
 import com.yourapp.test.myrecordinschool.roomdb.repository.ViolationRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +22,11 @@ class SyncManager(private val application: Application) {
     private val database = AppDatabase.getDatabase(application)
     private val violationRepository = ViolationRepository(database.violationDao())
     private val attendanceRepository = AttendanceRepository(database.attendanceDao())
+    private val imageCacheRepository = ImageCacheRepository(
+        context = application,
+        studentDao = database.studentDao(),
+        studentApi = RetrofitClient.getStudentApi(appPreferences.getAppConfig().baseUrl)
+    )
     
     private val _syncStatus = MutableStateFlow(SyncStatus())
     val syncStatus: StateFlow<SyncStatus> = _syncStatus.asStateFlow()
@@ -218,32 +224,95 @@ class SyncManager(private val application: Application) {
     
     suspend fun syncAcknowledgment(violationId: Int): Boolean {
         return try {
+            if (_networkState.value != NetworkState.Available) {
+                Log.d(TAG, "Offline - acknowledgment for violation $violationId will sync later")
+                // Store pending acknowledgment for later sync
+                storePendingAcknowledgment(violationId)
+                return true // Return true for offline-first UX
+            }
+            
             val config = appPreferences.getAppConfig()
             val api = RetrofitClient.getViolationApi(config.baseUrl)
             val response = api.acknowledgeViolation(violationId)
             
             if (response.isSuccessful && response.body()?.success == true) {
-                // Update local database
-                violationRepository.updateAcknowledgment(violationId, 1)
                 Log.d(TAG, "Acknowledgment synced successfully for violation: $violationId")
+                // Remove from pending acknowledgments
+                removePendingAcknowledgment(violationId)
                 true
             } else {
                 Log.e(TAG, "Failed to sync acknowledgment: ${response.message()}")
+                // Store for retry
+                storePendingAcknowledgment(violationId)
                 false
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error syncing acknowledgment", e)
+            // Store for retry
+            storePendingAcknowledgment(violationId)
             false
         }
+    }
+    
+    private fun storePendingAcknowledgment(violationId: Int) {
+        val pending = appPreferences.getPendingAcknowledgments().toMutableSet()
+        pending.add(violationId)
+        appPreferences.setPendingAcknowledgments(pending)
+        Log.d(TAG, "Stored pending acknowledgment for violation: $violationId")
+    }
+    
+    private fun removePendingAcknowledgment(violationId: Int) {
+        val pending = appPreferences.getPendingAcknowledgments().toMutableSet()
+        pending.remove(violationId)
+        appPreferences.setPendingAcknowledgments(pending)
+        Log.d(TAG, "Removed pending acknowledgment for violation: $violationId")
+    }
+    
+    private suspend fun syncPendingAcknowledgments(): Boolean {
+        val pendingAcknowledgments = appPreferences.getPendingAcknowledgments()
+        
+        if (pendingAcknowledgments.isEmpty()) {
+            return true
+        }
+        
+        Log.d(TAG, "Syncing ${pendingAcknowledgments.size} pending acknowledgments")
+        var allSuccessful = true
+        
+        for (violationId in pendingAcknowledgments) {
+            try {
+                val config = appPreferences.getAppConfig()
+                val api = RetrofitClient.getViolationApi(config.baseUrl)
+                val response = api.acknowledgeViolation(violationId)
+                
+                if (response.isSuccessful && response.body()?.success == true) {
+                    removePendingAcknowledgment(violationId)
+                    Log.d(TAG, "Successfully synced pending acknowledgment for violation: $violationId")
+                } else {
+                    allSuccessful = false
+                    Log.w(TAG, "Failed to sync pending acknowledgment for violation: $violationId")
+                }
+            } catch (e: Exception) {
+                allSuccessful = false
+                Log.w(TAG, "Error syncing pending acknowledgment for violation: $violationId", e)
+            }
+        }
+        
+        return allSuccessful
     }
     
     suspend fun performFullSync(forceRefresh: Boolean = false): Boolean {
         _syncStatus.value = _syncStatus.value.copy(syncState = SyncState.Syncing)
         
+        // First sync pending acknowledgments if online
+        var acknowledgmentsSynced = true
+        if (_networkState.value == NetworkState.Available) {
+            acknowledgmentsSynced = syncPendingAcknowledgments()
+        }
+        
         val violationsSynced = syncViolations(forceRefresh)
         val attendanceSynced = syncAttendance(forceRefresh = forceRefresh)
         
-        val success = violationsSynced && attendanceSynced
+        val success = violationsSynced && attendanceSynced && acknowledgmentsSynced
         
         _syncStatus.value = _syncStatus.value.copy(
             syncState = if (success) SyncState.Success else SyncState.Error("Partial sync failure"),
@@ -288,6 +357,15 @@ class SyncManager(private val application: Application) {
         if (needsAttendanceSync) {
             Log.d(TAG, "Cache stale, syncing attendance...")
             success = syncAttendancePaginated(studentId) && success
+        }
+        
+        // Background sync of profile images (non-blocking)
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                syncStudentImages(studentId)
+            } catch (e: Exception) {
+                Log.w(TAG, "Image sync failed but not blocking other operations", e)
+            }
         }
         
         // Perform cleanup if needed (non-blocking)
@@ -423,6 +501,110 @@ class SyncManager(private val application: Application) {
         }
     }
     
+    // Image synchronization methods
+    private suspend fun syncStudentImages(studentId: String): Boolean {
+        return try {
+            Log.d(TAG, "Starting background image sync for student: $studentId")
+            
+            // Check if student already has a cached image that's still valid
+            if (imageCacheRepository.hasCachedImage(studentId)) {
+                Log.d(TAG, "Student $studentId already has cached image, skipping download")
+                return true
+            }
+            
+            // Download and cache student image from backend
+            val success = imageCacheRepository.downloadAndCacheStudentImage(studentId)
+            
+            if (success) {
+                Log.d(TAG, "Successfully synced image for student: $studentId")
+            } else {
+                Log.w(TAG, "Failed to sync image for student: $studentId")
+            }
+            
+            success
+        } catch (e: Exception) {
+            Log.e(TAG, "Error syncing student images", e)
+            false
+        }
+    }
+    
+    /**
+     * Sync profile images for multiple students (e.g., from violation records)
+     */
+    suspend fun syncProfileImagesFromViolations(): Boolean {
+        return try {
+            val studentId = appPreferences.getStudentId() ?: return false
+            
+            // Get unique student IDs from recent violations that might have profile images
+            val recentViolations = violationRepository.getRecentViolations(studentId, 20)
+            val studentIds = recentViolations.map { it.student_id }.distinct()
+            
+            Log.d(TAG, "Syncing profile images for ${studentIds.size} students from violation records")
+            
+            var successCount = 0
+            for (id in studentIds) {
+                try {
+                    if (syncStudentImages(id)) {
+                        successCount++
+                    }
+                    // Add small delay to avoid overwhelming the server
+                    delay(100)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to sync image for student: $id", e)
+                }
+            }
+            
+            Log.d(TAG, "Image sync completed: $successCount/${studentIds.size} successful")
+            successCount == studentIds.size
+        } catch (e: Exception) {
+            Log.e(TAG, "Error syncing profile images from violations", e)
+            false
+        }
+    }
+    
+    /**
+     * Clean up old cached images to free space
+     */
+    private suspend fun cleanupImageCache() {
+        try {
+            Log.d(TAG, "Starting image cache cleanup...")
+            
+            // Clean images older than 7 days
+            imageCacheRepository.cleanupOldCache(7 * 24 * 60 * 60 * 1000L)
+            
+            val cacheSize = imageCacheRepository.getCacheSize()
+            Log.d(TAG, "Image cache cleanup completed, current cache size: ${cacheSize / 1024}KB")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during image cache cleanup", e)
+        }
+    }
+    
+    /**
+     * Force refresh of a specific student's profile image
+     */
+    suspend fun refreshStudentImage(studentId: String): Boolean {
+        return try {
+            Log.d(TAG, "Force refreshing image for student: $studentId")
+            
+            // Invalidate existing cache
+            imageCacheRepository.invalidateCache(studentId)
+            
+            // Download fresh image
+            val success = imageCacheRepository.downloadAndCacheStudentImage(studentId)
+            
+            if (success) {
+                Log.d(TAG, "Successfully refreshed image for student: $studentId")
+            } else {
+                Log.w(TAG, "Failed to refresh image for student: $studentId")
+            }
+            
+            success
+        } catch (e: Exception) {
+            Log.e(TAG, "Error refreshing student image", e)
+            false
+        }
+    }
+
     // Data cleanup method for optimization
     suspend fun performDataCleanup(): Boolean {
         val studentId = appPreferences.getStudentId() ?: return false
@@ -439,6 +621,9 @@ class SyncManager(private val application: Application) {
             
             // Cleanup old attendance (keep last 180 days)
             attendanceRepository.cleanupOldAttendance(studentId, 180)
+            
+            // Cleanup old cached images
+            cleanupImageCache()
             
             // Update last cleanup time
             appPreferences.setLastCleanupTime(System.currentTimeMillis())

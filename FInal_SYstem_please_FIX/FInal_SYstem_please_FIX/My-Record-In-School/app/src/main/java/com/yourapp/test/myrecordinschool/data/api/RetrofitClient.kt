@@ -62,9 +62,7 @@ object RetrofitClient {
         return getClient(baseUrl).create(ViolationApi::class.java)
     }
     
-    fun getAttendanceApi(baseUrl: String): AttendanceApi {
-        return getClient(baseUrl).create(AttendanceApi::class.java)
-    }
+    // Removed getAttendanceApi method - not needed for violations-only app
     
     fun getConnectionApi(baseUrl: String): ConnectionApi {
         return getClient(baseUrl).create(ConnectionApi::class.java)

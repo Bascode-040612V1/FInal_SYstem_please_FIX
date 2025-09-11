@@ -52,29 +52,7 @@ interface ViolationApi {
     ): Response<ViolationResponse>
 }
 
-interface AttendanceApi {
-    @GET("attendance/index.php/{student_number}")
-    suspend fun getStudentAttendance(
-         @Path("student_number") studentNumber: String,
-        @Query("month") month: Int? = null,
-        @Query("year") year: Int? = null
-    ): Response<AttendanceResponse>
-    
-    // Optimized endpoints for delta sync and minimal data transfer
-    @GET("attendance/index.php/{student_number}")
-    suspend fun getStudentAttendanceSince(
-        @Path("student_number") studentNumber: String,
-        @Query("since") timestamp: Long,
-        @Query("month") month: Int? = null,
-        @Query("year") year: Int? = null
-    ): Response<AttendanceResponse>
-    
-    @GET("attendance/index.php/{student_number}")
-    suspend fun getRecentAttendance(
-        @Path("student_number") studentNumber: String,
-        @Query("limit") limit: Int = 30
-    ): Response<AttendanceResponse>
-}
+// Removed AttendanceApi interface - not needed for violations-only app
 
 interface ConnectionApi {
     @GET("test_connection.php")

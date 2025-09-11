@@ -1,9 +1,10 @@
-# My Record in School App
+# My Record in School App - Violations Only
 
-A modern Android application built with Jetpack Compose that allows students to track their school violations and attendance records with full offline functionality.
+A modern Android application built with Jetpack Compose that allows students to track their school violations with full offline functionality.
 A **high-performance**, comprehensive mobile application for managing student disciplinary records in educational institutions. Built with modern Android development practices, intelligent caching, and optimized backend architecture.
 
 > **🚀 Now with Advanced Performance Optimizations**: 70% faster response times, 80% reduced server load, and complete offline capability!
+> **📝 Violations-Only Version**: Focused exclusively on violation tracking and management for streamlined user experience.
 
 ![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/kotlin-%230095D5.svg?style=for-the-badge&logo=kotlin&logoColor=white)
@@ -71,9 +72,9 @@ A **high-performance**, comprehensive mobile application for managing student di
 - **🖼️ Offline Image Caching**: Profile images cached locally for offline viewing
 - **Image Sync Management**: Automatic background image downloading and caching
 - **XAMPP Integration**: Connects to local XAMPP server
-- **Dual Database Support**: 
+- **Database Support**: 
   - `student_violation_db`: For violations data
-  - `rfid_system`: For attendance data
+  - Note: Attendance functionality has been removed for streamlined experience
 
 ## Technical Stack
 
@@ -134,15 +135,14 @@ app/
 2. **Settings01**: Configure server IP and port before first use
 
 ### Main App Flow
-1. **Home Screen**: Switch between "My Violations" and "My Attendance" tabs with sync status
-2. **Violations Tab**: List of violations with "View Details" buttons (acknowledgment is hidden)
+1. **Home Screen**: Focused on "My Violations" with sync status
+2. **Violations List**: List of violations with "View Details" buttons (acknowledgment is hidden)
 3. **Violation Details**: Detailed view with student data and penalty information
-4. **Attendance Tab**: Interactive calendar with monthly navigation and offline support
-5. **Settings02**: Profile management and system settings with network status
+4. **Settings02**: Profile management and system settings with network status
 
 ### Offline Features
 - **Offline Mode**: App displays "Offline Mode" when no internet connection
-- **Cached Data**: All violations and attendance are cached locally
+- **Cached Data**: All violations are cached locally
 - **Background Sync**: Data syncs automatically when connection is restored
 - **Loading States**: Professional loading indicators throughout the app
 
@@ -155,9 +155,8 @@ app/
 
 ### Database Setup
 1. Install and start XAMPP
-2. Create two databases:
+2. Create database:
    - `student_violation_db`
-   - `rfid_system`
 3. Set up your PHP API endpoints (not included in this repository)
 
 ### App Installation

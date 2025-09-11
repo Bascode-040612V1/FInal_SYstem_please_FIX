@@ -6,9 +6,10 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     sendResponse(false, "Only GET method is allowed");
 }
 
-$student_id = validateInput($_GET['student_id'] ?? '', 'alphanumeric', 20);
+$student_id = validateInput($_GET['student_id'] ?? '', 'student_id', 20);
 
 if (!$student_id) {
+    error_log("Student search failed: Invalid student ID provided - " . ($_GET['student_id'] ?? 'empty'));
     sendResponse(false, "Valid student ID is required");
 }
 
@@ -22,6 +23,9 @@ if (!$rfidConn && !$violationConn) {
 
 try {
     $student = null;
+    
+    // Log the search attempt
+    error_log("Student search: Looking for student_id = $student_id");
     
     // First, try to find student in student_violation_db.students table
     if ($violationConn) {
@@ -38,9 +42,12 @@ try {
         $stmt->bindParam(":student_id", $student_id);
         $stmt->execute();
         
+        error_log("Student search: Query executed, found " . $stmt->rowCount() . " rows");
+        
         if ($stmt->rowCount() > 0) {
             $student = $stmt->fetch(PDO::FETCH_ASSOC);
             $student['source'] = 'student_violation_db';
+            error_log("Student search: Found student in violation_db - " . $student['student_name']);
             
             // Try to get profile image from RFID database if available
             if ($rfidConn) {
@@ -67,7 +74,11 @@ try {
                 $student['image'] = null;
                 $student['image_url'] = null;
             }
+        } else {
+            error_log("Student search: Student $student_id not found in student_violation_db.students table");
         }
+    } else {
+        error_log("Student search: No connection to violation database");
     }
     
     // If not found in students table, try searching in violations table as fallback

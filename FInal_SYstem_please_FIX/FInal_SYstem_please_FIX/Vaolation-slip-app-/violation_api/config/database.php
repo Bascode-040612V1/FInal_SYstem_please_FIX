@@ -165,6 +165,9 @@ function validateInput($data, $type = 'string', $max_length = 255) {
             return is_numeric($data);
         case 'alphanumeric':
             return ctype_alnum($data);
+        case 'student_id':
+            // Allow alphanumeric characters and hyphens for student IDs
+            return preg_match('/^[a-zA-Z0-9\-]+$/', $data) ? $data : false;
         default:
             return $data;
     }

@@ -23,7 +23,7 @@ class AppPreferences(context: Context) {
         
         // Sync tracking keys for optimization
         private const val KEY_LAST_VIOLATION_SYNC = "last_violation_sync"
-        private const val KEY_LAST_ATTENDANCE_SYNC = "last_attendance_sync"
+        // Removed KEY_LAST_ATTENDANCE_SYNC - not needed for violations-only app
         private const val KEY_CACHE_TIMEOUT = "cache_timeout"
         
         // App usage and sync optimization keys
@@ -120,7 +120,7 @@ class AppPreferences(context: Context) {
             remove(KEY_STUDENT_SECTION)
             // Clear sync data on logout
             remove(KEY_LAST_VIOLATION_SYNC)
-            remove(KEY_LAST_ATTENDANCE_SYNC)
+            // Removed attendance sync - not needed
             apply()
         }
     }
@@ -136,15 +136,7 @@ class AppPreferences(context: Context) {
         return sharedPreferences.getLong(KEY_LAST_VIOLATION_SYNC, 0L)
     }
 
-    fun setLastAttendanceSync(timestamp: Long) {
-        sharedPreferences.edit()
-            .putLong(KEY_LAST_ATTENDANCE_SYNC, timestamp)
-            .apply()
-    }
-
-    fun getLastAttendanceSync(): Long {
-        return sharedPreferences.getLong(KEY_LAST_ATTENDANCE_SYNC, 0L)
-    }
+    // Removed setLastAttendanceSync and getLastAttendanceSync - not needed for violations-only app
 
     fun setCacheTimeout(timeoutMs: Long) {
         sharedPreferences.edit()
@@ -159,7 +151,7 @@ class AppPreferences(context: Context) {
     fun clearSyncData() {
         sharedPreferences.edit()
             .remove(KEY_LAST_VIOLATION_SYNC)
-            .remove(KEY_LAST_ATTENDANCE_SYNC)
+            // Removed attendance sync - not needed
             .apply()
     }
     

@@ -6,21 +6,21 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.yourapp.test.myrecordinschool.roomdb.dao.AttendanceDao
 import com.yourapp.test.myrecordinschool.roomdb.dao.StudentDao
 import com.yourapp.test.myrecordinschool.roomdb.dao.ViolationDao
-import com.yourapp.test.myrecordinschool.roomdb.entity.AttendanceEntity
+// Removed AttendanceDao import - not needed for violations-only app
 import com.yourapp.test.myrecordinschool.roomdb.entity.StudentEntity
 import com.yourapp.test.myrecordinschool.roomdb.entity.ViolationEntity
+// Removed AttendanceEntity import - not needed for violations-only app
 
 @Database(
-    entities = [ViolationEntity::class, AttendanceEntity::class, StudentEntity::class],
+    entities = [ViolationEntity::class, StudentEntity::class], // Removed AttendanceEntity
     version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun violationDao(): ViolationDao
-    abstract fun attendanceDao(): AttendanceDao
+    // Removed attendanceDao() - not needed for violations-only app
     abstract fun studentDao(): StudentDao
 
     companion object {

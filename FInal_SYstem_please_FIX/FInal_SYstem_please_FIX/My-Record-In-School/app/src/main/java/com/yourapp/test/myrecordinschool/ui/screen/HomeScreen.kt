@@ -24,8 +24,10 @@ import com.yourapp.test.myrecordinschool.data.model.Violation
 import com.yourapp.test.myrecordinschool.data.model.*
 import com.yourapp.test.myrecordinschool.data.sync.SyncManager
 import com.yourapp.test.myrecordinschool.ui.theme.*
-import com.yourapp.test.myrecordinschool.ui.components.*
-import com.yourapp.test.myrecordinschool.viewmodel.AttendanceViewModel
+import com.yourapp.test.myrecordinschool.ui.components.LoadingComponents
+import com.yourapp.test.myrecordinschool.ui.components.LoadingIndicator
+import com.yourapp.test.myrecordinschool.ui.components.ErrorCard
+import com.yourapp.test.myrecordinschool.ui.components.EmptyStateCard
 import com.yourapp.test.myrecordinschool.viewmodel.ViolationViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -35,11 +37,9 @@ import java.util.*
 fun HomeScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToViolationDetail: (Violation) -> Unit,
-    violationViewModel: ViolationViewModel = viewModel(),
-    attendanceViewModel: AttendanceViewModel = viewModel()
+    violationViewModel: ViolationViewModel = viewModel()
 ) {
-    var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("My Violations", "My Attendance")
+    // Removed tab functionality - only showing violations now
     
     // Get SyncManager instance for user interaction tracking
     val context = LocalContext.current
@@ -50,14 +50,12 @@ fun HomeScreen(
         syncManager.notifyUserInteraction()
     }
     
-    // Sync status for both ViewModels
+    // Sync status for violation ViewModel
     val violationSyncStatus by violationViewModel.syncStatus.collectAsState()
-    val attendanceSyncStatus by attendanceViewModel.syncStatus.collectAsState()
     val violationNetworkState by violationViewModel.networkState.collectAsState()
     
     LaunchedEffect(Unit) {
         violationViewModel.loadViolations()
-        attendanceViewModel.loadAttendance()
     }
     
     Column(
@@ -88,11 +86,7 @@ fun HomeScreen(
                 IconButton(
                     onClick = {
                         trackUserInteraction() // Track user interaction
-                        if (selectedTab == 0) {
-                            violationViewModel.refreshViolations()
-                        } else {
-                            attendanceViewModel.refreshAttendance()
-                        }
+                        violationViewModel.refreshViolations()
                     }
                 ) {
                     Icon(
@@ -118,45 +112,18 @@ fun HomeScreen(
             )
         )
         
-        // Tab Row
-        TabRow(
-            selectedTabIndex = selectedTab,
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.primary
-        ) {
-            tabs.forEachIndexed { index, title ->
-                Tab(
-                    selected = selectedTab == index,
-                    onClick = { 
-                        trackUserInteraction() // Track user interaction
-                        selectedTab = index 
-                    },
-                    modifier = Modifier.padding(vertical = 16.dp)
-                ) {
-                    Text(
-                        text = title,
-                        fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Medium,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                }
-            }
-        }
+        // No tab row needed - only showing violations
         
-        // Content
+        // Content - Only Violations
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            when (selectedTab) {
-                0 -> ViolationsTab(
-                    violationViewModel = violationViewModel,
-                    onNavigateToDetail = onNavigateToViolationDetail
-                )
-                1 -> AttendanceTab(
-                    attendanceViewModel = attendanceViewModel
-                )
-            }
+            ViolationsTab(
+                violationViewModel = violationViewModel,
+                onNavigateToDetail = onNavigateToViolationDetail
+            )
         }
     }
 }
@@ -388,31 +355,4 @@ private fun getOrdinalSuffix(number: Int): String {
     }
 }
 
-@Composable
-private fun AttendanceTab(
-    attendanceViewModel: AttendanceViewModel
-) {
-    val attendanceDataState by attendanceViewModel.attendanceDataState.collectAsState()
-    val isLoading by attendanceViewModel.isLoading.observeAsState(false)
-    val errorMessage by attendanceViewModel.errorMessage.observeAsState("")
-    
-    when {
-        isLoading -> {
-            LoadingIndicator(
-                isLoading = true,
-                message = "Loading attendance..."
-            )
-        }
-        
-        errorMessage.isNotEmpty() -> {
-            ErrorCard(
-                message = errorMessage,
-                onRetry = { attendanceViewModel.retryOperation() }
-            )
-        }
-        
-        else -> {
-            AttendanceCalendar(attendanceViewModel = attendanceViewModel)
-        }
-    }
-}
+// AttendanceTab removed - not needed anymore

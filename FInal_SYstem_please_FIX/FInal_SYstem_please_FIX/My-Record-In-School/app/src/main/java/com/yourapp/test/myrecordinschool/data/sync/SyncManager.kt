@@ -6,9 +6,7 @@ import com.yourapp.test.myrecordinschool.data.api.RetrofitClient
 import com.yourapp.test.myrecordinschool.data.model.*
 import com.yourapp.test.myrecordinschool.data.preferences.AppPreferences
 import com.yourapp.test.myrecordinschool.roomdb.AppDatabase
-import com.yourapp.test.myrecordinschool.roomdb.entity.AttendanceEntity
 import com.yourapp.test.myrecordinschool.roomdb.entity.ViolationEntity
-import com.yourapp.test.myrecordinschool.roomdb.repository.AttendanceRepository
 import com.yourapp.test.myrecordinschool.roomdb.repository.ImageCacheRepository
 import com.yourapp.test.myrecordinschool.roomdb.repository.ViolationRepository
 import kotlinx.coroutines.*
@@ -21,7 +19,7 @@ class SyncManager(private val application: Application) {
     private val appPreferences = AppPreferences(application)
     private val database = AppDatabase.getDatabase(application)
     private val violationRepository = ViolationRepository(database.violationDao())
-    private val attendanceRepository = AttendanceRepository(database.attendanceDao())
+    // Removed attendance repository - not needed
     
     // Lazy initialization to avoid circular dependency issues
     private val imageCacheRepository by lazy {
@@ -141,90 +139,7 @@ class SyncManager(private val application: Application) {
         }
     }
     
-    suspend fun syncAttendance(month: Int? = null, year: Int? = null, forceRefresh: Boolean = false): Boolean {
-        val studentId = appPreferences.getStudentId() ?: return false
-        
-        return try {
-            _syncStatus.value = _syncStatus.value.copy(syncState = SyncState.Syncing)
-            
-            // Smart caching for attendance
-            if (!forceRefresh && attendanceRepository.isCacheValid(studentId)) {
-                Log.d(TAG, "Using cached attendance data - cache still valid")
-                _syncStatus.value = _syncStatus.value.copy(
-                    syncState = SyncState.Success,
-                    lastSyncTime = System.currentTimeMillis()
-                )
-                return true
-            }
-            
-            val config = appPreferences.getAppConfig()
-            val api = RetrofitClient.getAttendanceApi(config.baseUrl)
-            
-            // Delta sync for attendance
-            val lastSyncTime = appPreferences.getLastAttendanceSync()
-            val response = if (lastSyncTime > 0 && !forceRefresh) {
-                Log.d(TAG, "Performing delta sync for attendance since: $lastSyncTime")
-                api.getStudentAttendanceSince(studentId, lastSyncTime, month, year)
-            } else {
-                Log.d(TAG, "Performing full sync for attendance")
-                api.getStudentAttendance(studentId, month, year)
-            }
-            
-            if (response.isSuccessful && response.body()?.success == true) {
-                val attendance = response.body()?.attendance ?: emptyList()
-                
-                Log.d(TAG, "Received ${attendance.size} attendance records (delta sync: ${lastSyncTime > 0})")
-                
-                // Convert to entities
-                val entities = attendance.map { att ->
-                    AttendanceEntity(
-                        id = att.id,
-                        student_id = att.student_id,
-                        student_name = att.student_name,
-                        student_number = att.student_number,
-                        date = att.date,
-                        time_in = att.time_in,
-                        time_out = att.time_out,
-                        status = att.status,
-                        attendance_type = att.attendance_type,
-                        created_at = att.created_at
-                    )
-                }
-                
-                // Clear old data for the specific month if provided
-                if (month != null && year != null && forceRefresh) {
-                    val yearMonth = String.format("%04d-%02d", year, month)
-                    attendanceRepository.clearAttendanceForMonth(studentId, yearMonth)
-                } else if (forceRefresh) {
-                    attendanceRepository.clearAttendanceForStudent(studentId)
-                }
-                
-                attendanceRepository.saveAttendance(entities)
-                
-                // Update sync timestamp
-                appPreferences.setLastAttendanceSync(System.currentTimeMillis())
-                
-                _syncStatus.value = _syncStatus.value.copy(
-                    syncState = SyncState.Success,
-                    lastSyncTime = System.currentTimeMillis()
-                )
-                
-                Log.d(TAG, "Attendance synced successfully: ${entities.size} items")
-                true
-            } else {
-                _syncStatus.value = _syncStatus.value.copy(
-                    syncState = SyncState.Error("Failed to sync attendance: ${response.message()}")
-                )
-                false
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error syncing attendance", e)
-            _syncStatus.value = _syncStatus.value.copy(
-                syncState = SyncState.Error("Network error: ${e.message}")
-            )
-            false
-        }
-    }
+    // Removed syncAttendance method - not needed for violations-only app
     
     suspend fun syncAcknowledgment(violationId: Int): Boolean {
         return try {
@@ -314,9 +229,9 @@ class SyncManager(private val application: Application) {
         }
         
         val violationsSynced = syncViolations(forceRefresh)
-        val attendanceSynced = syncAttendance(forceRefresh = forceRefresh)
+        // Removed attendance sync - not needed
         
-        val success = violationsSynced && attendanceSynced && acknowledgmentsSynced
+        val success = violationsSynced && acknowledgmentsSynced
         
         _syncStatus.value = _syncStatus.value.copy(
             syncState = if (success) SyncState.Success else SyncState.Error("Partial sync failure"),
@@ -349,7 +264,7 @@ class SyncManager(private val application: Application) {
         val studentId = appPreferences.getStudentId() ?: return false
         
         val needsViolationSync = !violationRepository.isCacheValid(studentId)
-        val needsAttendanceSync = !attendanceRepository.isCacheValid(studentId)
+        // Removed attendance sync check - not needed
         
         var success = true
         
@@ -358,10 +273,7 @@ class SyncManager(private val application: Application) {
             success = syncViolationsPaginated(studentId) && success
         }
         
-        if (needsAttendanceSync) {
-            Log.d(TAG, "Cache stale, syncing attendance...")
-            success = syncAttendancePaginated(studentId) && success
-        }
+        // Removed attendance sync - not needed
         
         // Background sync of profile images (non-blocking)
         CoroutineScope(Dispatchers.IO).launch {
@@ -379,7 +291,7 @@ class SyncManager(private val application: Application) {
             }
         }
         
-        if (!needsViolationSync && !needsAttendanceSync) {
+        if (!needsViolationSync) {
             Log.d(TAG, "Cache still valid, skipping sync")
         }
         
@@ -450,60 +362,7 @@ class SyncManager(private val application: Application) {
         }
     }
     
-    private suspend fun syncAttendancePaginated(studentId: String, pageSize: Int = 100): Boolean {
-        return try {
-            _syncStatus.value = _syncStatus.value.copy(syncState = SyncState.Syncing)
-            
-            val config = appPreferences.getAppConfig()
-            val api = RetrofitClient.getAttendanceApi(config.baseUrl)
-            
-            // Get recent attendance with limit
-            val response = api.getRecentAttendance(studentId, pageSize)
-            
-            if (response.isSuccessful && response.body()?.success == true) {
-                val attendance = response.body()?.attendance ?: emptyList()
-                
-                Log.d(TAG, "Received ${attendance.size} attendance records (paginated)")
-                
-                val entities = attendance.map { att ->
-                    AttendanceEntity(
-                        id = att.id,
-                        student_id = att.student_id,
-                        student_name = att.student_name,
-                        student_number = att.student_number,
-                        date = att.date,
-                        time_in = att.time_in,
-                        time_out = att.time_out,
-                        status = att.status,
-                        attendance_type = att.attendance_type,
-                        created_at = att.created_at
-                    )
-                }
-                
-                attendanceRepository.saveAttendance(entities)
-                appPreferences.setLastAttendanceSync(System.currentTimeMillis())
-                
-                _syncStatus.value = _syncStatus.value.copy(
-                    syncState = SyncState.Success,
-                    lastSyncTime = System.currentTimeMillis()
-                )
-                
-                Log.d(TAG, "Attendance synced successfully (paginated): ${entities.size} items")
-                true
-            } else {
-                _syncStatus.value = _syncStatus.value.copy(
-                    syncState = SyncState.Error("Failed to sync attendance: ${response.message()}")
-                )
-                false
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error syncing attendance (paginated)", e)
-            _syncStatus.value = _syncStatus.value.copy(
-                syncState = SyncState.Error("Network error: ${e.message}")
-            )
-            false
-        }
-    }
+    // Removed syncAttendancePaginated method - not needed for violations-only app
     
     // Image synchronization methods
     private suspend fun syncStudentImages(studentId: String): Boolean {
@@ -623,8 +482,7 @@ class SyncManager(private val application: Application) {
             // Cleanup old violations (keep last 90 days)
             violationRepository.cleanupOldViolations(studentId, 90)
             
-            // Cleanup old attendance (keep last 180 days)
-            attendanceRepository.cleanupOldAttendance(studentId, 180)
+            // Removed attendance cleanup - not needed
             
             // Cleanup old cached images
             cleanupImageCache()

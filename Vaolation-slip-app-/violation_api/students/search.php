@@ -20,8 +20,18 @@ if (!$conn) {
 }
 
 try {
-    // Search student in RFID database
-    $query = "SELECT student_id, student_name, year_level, course, section, image FROM students WHERE student_id = :student_id";
+    // Search student in RFID database using correct column names
+    $query = "SELECT 
+                student_number as student_id, 
+                name as student_name, 
+                id, 
+                rfid, 
+                image,
+                'N/A' as year_level,
+                'N/A' as course,
+                'N/A' as section
+              FROM students 
+              WHERE student_number = :student_id";
     $stmt = $conn->prepare($query);
     $stmt->bindParam(":student_id", $student_id);
     $stmt->execute();
@@ -29,9 +39,21 @@ try {
     if ($stmt->rowCount() > 0) {
         $student = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        // Get offense counts from violation database
+        // Try to get additional student info from violation database if available
         $violationConn = $database->getViolationConnection();
         if ($violationConn) {
+            $studentInfoQuery = "SELECT year_level, course, section FROM students WHERE student_id = ?";
+            $studentInfoStmt = $violationConn->prepare($studentInfoQuery);
+            $studentInfoStmt->execute([$student_id]);
+            
+            if ($studentInfoStmt->rowCount() > 0) {
+                $additionalInfo = $studentInfoStmt->fetch(PDO::FETCH_ASSOC);
+                $student['year_level'] = $additionalInfo['year_level'];
+                $student['course'] = $additionalInfo['course'];
+                $student['section'] = $additionalInfo['section'];
+            }
+            
+            // Get offense counts from violation database
             $offenseQuery = "SELECT violation_type, offense_count FROM student_violation_offense_counts WHERE student_id = ?";
             $offenseStmt = $violationConn->prepare($offenseQuery);
             $offenseStmt->execute([$student_id]);
@@ -42,6 +64,9 @@ try {
             }
             
             $student['offense_counts'] = $offenseCounts;
+        } else {
+            // If violation database is not available, set empty offense counts
+            $student['offense_counts'] = [];
         }
         
         sendResponse(true, "Student found", $student);
@@ -51,6 +76,6 @@ try {
     
 } catch(PDOException $exception) {
     error_log("Student search error: " . $exception->getMessage());
-    sendResponse(false, "Search failed");
+    sendResponse(false, "Search failed: " . $exception->getMessage());
 }
 ?>

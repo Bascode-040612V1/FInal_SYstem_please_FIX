@@ -16,7 +16,7 @@ if (!$rfidConn) {
 try {
     // Get the latest unused RFID scan from rfid_admin_scans table
     $query = "SELECT rfid_number FROM rfid_admin_scans 
-              WHERE is_used = 0 
+              WHERE is_registered = 0 
               ORDER BY scanned_at DESC 
               LIMIT 1";
     $stmt = $rfidConn->prepare($query);

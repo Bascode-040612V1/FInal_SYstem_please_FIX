@@ -73,7 +73,7 @@ try {
                     $adminStmt->execute();
                     
                     // Mark RFID as used in rfid_admin_scans
-                    $updateRfidQuery = "UPDATE rfid_admin_scans SET is_used = 1, admin_username = :username WHERE rfid_number = :rfid AND is_used = 0";
+                    $updateRfidQuery = "UPDATE rfid_admin_scans SET is_registered = 1, admin_username = :username WHERE rfid_number = :rfid AND is_registered = 0";
                     $updateRfidStmt = $rfidConn->prepare($updateRfidQuery);
                     $updateRfidStmt->bindParam(":username", $username);
                     $updateRfidStmt->bindParam(":rfid", $rfid);

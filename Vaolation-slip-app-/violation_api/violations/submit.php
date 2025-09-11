@@ -31,19 +31,35 @@ if (!$conn) {
 try {
     $conn->beginTransaction();
     
-    // Get student info first
+    // Get student info first from RFID database
     $rfidConn = $database->getRfidConnection();
     if (!$rfidConn) {
         sendResponse(false, "RFID database connection failed");
     }
     
-    $studentQuery = "SELECT student_name, year_level, course, section FROM students WHERE student_id = ?";
+    $studentQuery = "SELECT name as student_name, id FROM students WHERE student_number = ?";
     $studentStmt = $rfidConn->prepare($studentQuery);
     $studentStmt->execute([$student_id]);
     $student = $studentStmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$student) {
-        sendResponse(false, "Student not found");
+        sendResponse(false, "Student not found in RFID database");
+    }
+    
+    // Try to get additional student info from violation database
+    $year_level = 'N/A';
+    $course = 'N/A';
+    $section = 'N/A';
+    
+    $additionalInfoQuery = "SELECT year_level, course, section FROM students WHERE student_id = ?";
+    $additionalInfoStmt = $conn->prepare($additionalInfoQuery);
+    $additionalInfoStmt->execute([$student_id]);
+    
+    if ($additionalInfoStmt->rowCount() > 0) {
+        $additionalInfo = $additionalInfoStmt->fetch(PDO::FETCH_ASSOC);
+        $year_level = $additionalInfo['year_level'];
+        $course = $additionalInfo['course'];
+        $section = $additionalInfo['section'];
     }
     
     // Process violations and get highest offense count
@@ -83,16 +99,16 @@ try {
         $penalty = $penalty_data['penalty_description'];
     }
     
-    // Insert violation record
+    // Insert violation record with all required fields
     $violationQuery = "INSERT INTO violations (student_id, student_name, year_level, course, section, offense_count, penalty, recorded_by) 
                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
     $violationStmt = $conn->prepare($violationQuery);
     $violationStmt->execute([
         $student_id,
         $student['student_name'],
-        $student['year_level'],
-        $student['course'],
-        $student['section'],
+        $year_level,
+        $course,
+        $section,
         $highest_offense,
         $penalty,
         $recorded_by

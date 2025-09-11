@@ -23,7 +23,7 @@ A **high-performance**, comprehensive mobile application for managing student di
 
 ### 📱 Main Features
 
-#### 🚨 Violation Tracking
+#### 🚨 Violation Tracking (Primary Focus)
 - View violation history with detailed information
 - Color-coded offense indicators (Green: 1st offense, Orange: 2nd offense, Red: 3rd+ offense)
 - **Hidden Acknowledge System**: Violations are automatically acknowledged when viewing details (transparent to students)
@@ -34,13 +34,6 @@ A **high-performance**, comprehensive mobile application for managing student di
   - **Conduct Violations**: Cutting classes, cheating, etc.
   - **Minor Offenses**: Using cellphones, eating in labs, etc.
   - **Major Offenses**: Stealing, vandalism, etc.
-
-#### 📅 Attendance Calendar
-- Interactive calendar view showing attendance status
-- Color-coded days (Green: Present, Red: Absent, Orange: Late)
-- Monthly navigation with attendance statistics
-- **Offline Calendar**: Works without internet with cached data
-- Visual attendance tracking with real-time updates
 
 #### ⚙️ Settings & Configuration
 - **Settings01**: IP and port configuration for XAMPP server
@@ -111,7 +104,7 @@ A **high-performance**, comprehensive mobile application for managing student di
 app/
 ├── data/
 │   ├── api/                 # API interfaces and Retrofit setup
-│   ├── model/              # Data models (Student, Violation, Attendance, DataState)
+│   ├── model/              # Data models (Student, Violation, DataState)
 │   ├── preferences/        # SharedPreferences utilities
 │   └── sync/               # SyncManager for offline-online synchronization
 ├── navigation/             # Navigation setup
@@ -204,16 +197,7 @@ app/
 - category: Violation category
 ```
 
-#### Attendance Table (rfid_system)
-```sql
-- id: Primary key
-- student_id: Foreign key
-- date: Attendance date
-- time_in: Entry time
-- time_out: Exit time
-- status: PRESENT/ABSENT/LATE
-- created_at: Record timestamp
-```
+**Note**: Attendance table schema has been removed as this is now a violations-only application.
 
 ## API Endpoints
 
@@ -232,11 +216,11 @@ The app expects these PHP endpoints:
 - `GET /violations/{student_id}`
 - `PUT /violations/acknowledge/{id}`
 
-### Attendance
-- `GET /attendance/{student_id}?month={month}&year={year}`
-
 ### System
 - `GET /test_connection.php`
+
+### Note
+Attendance endpoints have been removed as this is now a violations-only application.
 
 ## Features in Detail
 

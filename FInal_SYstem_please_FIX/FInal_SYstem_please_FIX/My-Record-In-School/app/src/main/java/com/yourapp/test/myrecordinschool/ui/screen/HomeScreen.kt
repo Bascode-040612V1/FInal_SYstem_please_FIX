@@ -24,7 +24,6 @@ import com.yourapp.test.myrecordinschool.data.model.Violation
 import com.yourapp.test.myrecordinschool.data.model.*
 import com.yourapp.test.myrecordinschool.data.sync.SyncManager
 import com.yourapp.test.myrecordinschool.ui.theme.*
-import com.yourapp.test.myrecordinschool.ui.components.LoadingComponents
 import com.yourapp.test.myrecordinschool.ui.components.LoadingIndicator
 import com.yourapp.test.myrecordinschool.ui.components.ErrorCard
 import com.yourapp.test.myrecordinschool.ui.components.EmptyStateCard

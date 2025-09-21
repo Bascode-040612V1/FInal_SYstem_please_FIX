@@ -7,26 +7,26 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 }
 
 $database = new Database();
-$rfidConn = $database->getRfidConnection();
+$conn = $database->getViolationConnection();
 
-if (!$rfidConn) {
-    sendResponse(false, "RFID database connection failed");
+if (!$conn) {
+    sendResponse(false, "Database connection failed");
 }
 
 try {
-    // Get the latest unused RFID scan from rfid_admin_scans table
-    $query = "SELECT rfid_number FROM rfid_admin_scans 
-              WHERE is_used = 0 
-              ORDER BY scanned_at DESC 
+    // Get the latest RFID scan from rfid_registration_scans table
+    $query = "SELECT rfid FROM rfid_registration_scans 
+              WHERE user_type IN ('admin', 'student') 
+              ORDER BY time_scanned DESC 
               LIMIT 1";
-    $stmt = $rfidConn->prepare($query);
+    $stmt = $conn->prepare($query);
     $stmt->execute();
     
     if ($stmt->rowCount() > 0) {
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
-        sendResponse(true, "RFID number retrieved successfully", $result['rfid_number']);
+        sendResponse(true, "RFID number retrieved successfully", $result['rfid']);
     } else {
-        sendResponse(false, "No unused RFID scans available");
+        sendResponse(false, "No RFID scans available");
     }
     
 } catch(PDOException $exception) {

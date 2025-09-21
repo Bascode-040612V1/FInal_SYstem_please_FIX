@@ -220,12 +220,13 @@ fun OthersViolationItem(
                             color = if (isSelected) PrimaryBlue else Color.White
                         )
                         
-                        if (isSelected && offenseCount > 0) {
+                        // Always show offense count for this violation type
+                        if (offenseCount > 0) {
                             Text(
-                                text = "${offenseCount}${when(offenseCount) { 1 -> "st"; 2 -> "nd"; 3 -> "rd"; else -> "th" }} Offense",
+                                text = "Next: ${offenseCount}${when(offenseCount) { 1 -> "st"; 2 -> "nd"; 3 -> "rd"; else -> "th" }} Offense",
                                 fontSize = 12.sp,
-                                color = offenseColor,
-                                fontWeight = FontWeight.Medium
+                                color = if (isSelected) offenseColor else Color.Gray,
+                                fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
                             )
                         }
                     }
@@ -309,12 +310,13 @@ fun ViolationItem(
                         color = if (isSelected) PrimaryBlue else Color.White
                     )
                     
-                    if (isSelected && offenseCount > 0) {
+                    // Always show offense count for this violation type
+                    if (offenseCount > 0) {
                         Text(
-                            text = "${offenseCount}${when(offenseCount) { 1 -> "st"; 2 -> "nd"; 3 -> "rd"; else -> "th" }} Offense",
+                            text = "Next: ${offenseCount}${when(offenseCount) { 1 -> "st"; 2 -> "nd"; 3 -> "rd"; else -> "th" }} Offense",
                             fontSize = 12.sp,
-                            color = offenseColor,
-                            fontWeight = FontWeight.Medium
+                            color = if (isSelected) offenseColor else Color.Gray,
+                            fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
                         )
                     }
                 }

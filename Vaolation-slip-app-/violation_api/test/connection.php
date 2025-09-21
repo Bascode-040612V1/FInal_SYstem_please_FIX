@@ -9,34 +9,29 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 $database = new Database();
 
 try {
-    // Test both database connections
-    $violationConn = $database->getViolationConnection();
-    $rfidConn = $database->getRfidConnection();
+    // Test database connection (both violation and rfid use same db now)
+    $conn = $database->getViolationConnection();
     
     $results = [];
     
-    if ($violationConn) {
-        $results['violation_db'] = 'Connected successfully';
+    if ($conn) {
+        $results['database'] = 'Connected successfully to aics_bicutan_system_db';
         
-        // Test a simple query
-        $stmt = $violationConn->prepare("SELECT COUNT(*) as count FROM users");
-        $stmt->execute();
-        $userCount = $stmt->fetch(PDO::FETCH_ASSOC);
-        $results['users_count'] = $userCount['count'];
-    } else {
-        $results['violation_db'] = 'Connection failed';
-    }
-    
-    if ($rfidConn) {
-        $results['rfid_db'] = 'Connected successfully';
+        // Test queries on key tables
+        $tables_to_test = ['admins', 'guards', 'students', 'violation_types', 'violations'];
         
-        // Test a simple query
-        $stmt = $rfidConn->prepare("SELECT COUNT(*) as count FROM students");
-        $stmt->execute();
-        $studentCount = $stmt->fetch(PDO::FETCH_ASSOC);
-        $results['students_count'] = $studentCount['count'];
+        foreach ($tables_to_test as $table) {
+            try {
+                $stmt = $conn->prepare("SELECT COUNT(*) as count FROM $table");
+                $stmt->execute();
+                $count = $stmt->fetch(PDO::FETCH_ASSOC);
+                $results["{$table}_count"] = $count['count'];
+            } catch(PDOException $e) {
+                $results["{$table}_count"] = "Table not found or error: " . $e->getMessage();
+            }
+        }
     } else {
-        $results['rfid_db'] = 'Connection failed';
+        $results['database'] = 'Connection failed';
     }
     
     $results['server_time'] = date('Y-m-d H:i:s');

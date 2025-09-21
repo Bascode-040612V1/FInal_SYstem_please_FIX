@@ -33,8 +33,8 @@ class Database {
         // Get configuration from environment variables (with fallbacks)
         $this->host = $_ENV['DB_HOST'] ?? getenv('DB_HOST') ?: 'localhost';
         $this->port = $_ENV['DB_PORT'] ?? getenv('DB_PORT') ?: '3306';
-        $this->violation_db_name = $_ENV['DB_VIOLATION_NAME'] ?? getenv('DB_VIOLATION_NAME') ?: 'student_violation_db';
-        $this->rfid_db_name = $_ENV['DB_RFID_NAME'] ?? getenv('DB_RFID_NAME') ?: 'rfid_system';
+        $this->violation_db_name = $_ENV['DB_NAME'] ?? getenv('DB_NAME') ?: 'aics_bicutan_system_db';
+        $this->rfid_db_name = $_ENV['DB_NAME'] ?? getenv('DB_NAME') ?: 'aics_bicutan_system_db';
         $this->username = $_ENV['DB_USERNAME'] ?? getenv('DB_USERNAME') ?: 'root';
         $this->password = $_ENV['DB_PASSWORD'] ?? getenv('DB_PASSWORD') ?: '';
     }

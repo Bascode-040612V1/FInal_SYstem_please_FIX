@@ -20,12 +20,32 @@ if (!$conn) {
 }
 
 try {
-    // Get student violations
-    $query = "SELECT v.*, vd.violation_type 
-              FROM violations v 
-              LEFT JOIN violation_details vd ON v.id = vd.violation_id 
-              WHERE v.student_id = ? 
-              ORDER BY v.recorded_at DESC";
+    // Get student violations with violation type names
+    $query = "SELECT 
+        v.violation_id as id,
+        v.student_number as student_id,
+        CONCAT_WS(' ', s.surname, s.firstname, IFNULL(s.lastname, '')) as student_name,
+        s.yearlevel as year_level,
+        s.course,
+        s.section,
+        v.offense_count,
+        v.penalty,
+        CASE 
+            WHEN v.recorded_by_role = 'admin' THEN CONCAT('Admin: ', a.name)
+            WHEN v.recorded_by_role = 'guard' THEN CONCAT('Guard: ', g.name)
+            ELSE 'Unknown'
+        END as recorded_by,
+        v.created_at as recorded_at,
+        v.acknowledged,
+        vt.violation_name as violation_type,
+        vt.category
+    FROM violations v
+    JOIN students s ON v.student_number = s.student_number
+    JOIN violation_types vt ON v.violation_type_id = vt.id
+    LEFT JOIN admins a ON v.recorded_by_role = 'admin' AND v.recorded_by_id = a.rfid
+    LEFT JOIN guards g ON v.recorded_by_role = 'guard' AND v.recorded_by_id = g.id
+    WHERE v.student_number = ? 
+    ORDER BY v.created_at DESC";
     $stmt = $conn->prepare($query);
     $stmt->execute([$student_id]);
     

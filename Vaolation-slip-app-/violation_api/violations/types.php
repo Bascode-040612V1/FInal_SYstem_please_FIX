@@ -15,7 +15,7 @@ if (!$conn) {
 
 try {
     // Get violation types with caching headers
-    $query = "SELECT id, violation_name, category, penalty_description FROM violation_types ORDER BY category, violation_name";
+    $query = "SELECT id, violation_name, category, is_active FROM violation_types WHERE is_active = 1 ORDER BY category, violation_name";
     $stmt = $conn->prepare($query);
     $stmt->execute();
     

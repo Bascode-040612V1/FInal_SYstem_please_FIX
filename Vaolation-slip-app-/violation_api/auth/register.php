@@ -18,10 +18,24 @@ $username = validateInput($data->username, 'string', 50);
 $email = validateInput($data->email, 'email');
 $password = validateInput($data->password, 'string', 128);
 $role = validateInput($data->role ?? 'guard', 'string', 20);
-$rfid = isset($data->rfid) ? validateInput($data->rfid, 'string', 50) : null;
+
+// RFID is only available for admin and teacher roles, not for guards
+$rfid = null;
+if (in_array($role, ['admin', 'teacher']) && isset($data->rfid)) {
+    $rfid = validateInput($data->rfid, 'string', 50);
+}
 
 if (!$username || !$email || !$password) {
     sendResponse(false, "Invalid input format");
+}
+
+// Validate role-specific requirements
+if ($role === 'guard' && isset($data->rfid) && !empty($data->rfid)) {
+    sendResponse(false, "RFID is not allowed for guard role");
+}
+
+if (in_array($role, ['admin', 'teacher']) && isset($data->rfid) && !empty($data->rfid) && !$rfid) {
+    sendResponse(false, "Invalid RFID format");
 }
 
 $database = new Database();
@@ -32,70 +46,83 @@ if (!$conn) {
 }
 
 try {
-    // Check if user already exists
-    $query = "SELECT id FROM users WHERE email = :email OR username = :username";
-    $stmt = $conn->prepare($query);
-    $stmt->bindParam(":email", $email);
-    $stmt->bindParam(":username", $username);
-    $stmt->execute();
+    // Check if user already exists in admins or guards tables
+    $adminQuery = "SELECT rfid FROM admins WHERE email = :email OR name = :username";
+    $adminStmt = $conn->prepare($adminQuery);
+    $adminStmt->bindParam(":email", $email);
+    $adminStmt->bindParam(":username", $username);
+    $adminStmt->execute();
+    
+    $guardQuery = "SELECT id FROM guards WHERE email = :email OR name = :username";
+    $guardStmt = $conn->prepare($guardQuery);
+    $guardStmt->bindParam(":email", $email);
+    $guardStmt->bindParam(":username", $username);
+    $guardStmt->execute();
 
-    if ($stmt->rowCount() > 0) {
+    if ($adminStmt->rowCount() > 0 || $guardStmt->rowCount() > 0) {
         sendResponse(false, "User with this email or username already exists");
     }
 
     // Hash password securely
     $hashed_password = password_hash($password, PASSWORD_DEFAULT);
 
-    // Insert new user with RFID
-    $query = "INSERT INTO users (username, email, password, role, rfid) VALUES (:username, :email, :password, :role, :rfid)";
-    $stmt = $conn->prepare($query);
-    
-    $stmt->bindParam(":username", $username);
-    $stmt->bindParam(":email", $email);
-    $stmt->bindParam(":password", $hashed_password);
-    $stmt->bindParam(":role", $role);
-    $stmt->bindParam(":rfid", $rfid);
-
-    if ($stmt->execute()) {
-        $user_id = $conn->lastInsertId();
-        
-        // Store RFID in admins table in rfid_system database if RFID is provided
+    // Insert new user based on role
+    if (in_array($role, ['admin', 'teacher'])) {
+        // Insert into admins table (RFID available for admin/teacher)
         if ($rfid) {
-            $rfidConn = $database->getRfidConnection();
-            if ($rfidConn) {
-                try {
-                    // Insert into admins table in rfid_system database
-                    $adminQuery = "INSERT INTO admins (username, rfid, password) VALUES (:username, :rfid, :password)";
-                    $adminStmt = $rfidConn->prepare($adminQuery);
-                    $adminStmt->bindParam(":username", $username);
-                    $adminStmt->bindParam(":rfid", $rfid);
-                    $adminStmt->bindParam(":password", $hashed_password);
-                    $adminStmt->execute();
-                    
-                    // Mark RFID as used in rfid_admin_scans
-                    $updateRfidQuery = "UPDATE rfid_admin_scans SET is_used = 1, admin_username = :username WHERE rfid_number = :rfid AND is_used = 0";
-                    $updateRfidStmt = $rfidConn->prepare($updateRfidQuery);
-                    $updateRfidStmt->bindParam(":username", $username);
-                    $updateRfidStmt->bindParam(":rfid", $rfid);
-                    $updateRfidStmt->execute();
-                } catch(PDOException $rfid_exception) {
-                    error_log("RFID registration error: " . $rfid_exception->getMessage());
-                }
-            }
+            // If RFID is provided, store it in the admins table
+            $query = "INSERT INTO admins (name, email, password, role, image) VALUES (:username, :email, :password, :role, :rfid)";
+            $stmt = $conn->prepare($query);
+            
+            $stmt->bindParam(":username", $username);
+            $stmt->bindParam(":email", $email);
+            $stmt->bindParam(":password", $hashed_password);
+            $admin_role = ($role === 'teacher') ? 'Teacher' : 'Admin';
+            $stmt->bindParam(":role", $admin_role);
+            $stmt->bindParam(":rfid", $rfid); // Store RFID in image field for now
+        } else {
+            $query = "INSERT INTO admins (name, email, password, role) VALUES (:username, :email, :password, :role)";
+            $stmt = $conn->prepare($query);
+            
+            $stmt->bindParam(":username", $username);
+            $stmt->bindParam(":email", $email);
+            $stmt->bindParam(":password", $hashed_password);
+            $admin_role = ($role === 'teacher') ? 'Teacher' : 'Admin';
+            $stmt->bindParam(":role", $admin_role);
         }
         
-        $user_data = array(
-            "id" => $user_id,
-            "username" => $username,
-            "email" => $email,
-            "role" => $role,
-            "rfid" => $rfid
-        );
-
-        sendResponse(true, "Registration successful", $user_data);
+        if ($stmt->execute()) {
+            $user_id = $conn->lastInsertId();
+        } else {
+            sendResponse(false, "Registration failed");
+        }
     } else {
-        sendResponse(false, "Registration failed");
+        // Insert into guards table (NO RFID for guards)
+        $query = "INSERT INTO guards (name, email, password) VALUES (:username, :email, :password)";
+        $stmt = $conn->prepare($query);
+        
+        $stmt->bindParam(":username", $username);
+        $stmt->bindParam(":email", $email);
+        $stmt->bindParam(":password", $hashed_password);
+        
+        if ($stmt->execute()) {
+            $user_id = $conn->lastInsertId();
+            // Force RFID to null for guards
+            $rfid = null;
+        } else {
+            sendResponse(false, "Registration failed");
+        }
     }
+        
+    $user_data = array(
+        "id" => $user_id,
+        "username" => $username,
+        "email" => $email,
+        "role" => $role,
+        "rfid" => $rfid
+    );
+
+    sendResponse(true, "Registration successful", $user_data);
 
 } catch(PDOException $exception) {
     error_log("Registration error: " . $exception->getMessage());

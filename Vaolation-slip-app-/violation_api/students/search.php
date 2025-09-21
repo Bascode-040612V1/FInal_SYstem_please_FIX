@@ -13,15 +13,23 @@ if (!$student_id) {
 }
 
 $database = new Database();
-$conn = $database->getRfidConnection();
+$conn = $database->getViolationConnection();
 
 if (!$conn) {
     sendResponse(false, "Database connection failed");
 }
 
 try {
-    // Search student in RFID database
-    $query = "SELECT student_id, student_name, year_level, course, section, image FROM students WHERE student_id = :student_id";
+    // Search student in database
+    $query = "SELECT 
+        student_number as student_id, 
+        CONCAT_WS(' ', surname, firstname, IFNULL(lastname, '')) as student_name, 
+        yearlevel as year_level, 
+        course, 
+        section, 
+        image 
+    FROM students 
+    WHERE student_number = :student_id";
     $stmt = $conn->prepare($query);
     $stmt->bindParam(":student_id", $student_id);
     $stmt->execute();
@@ -29,20 +37,22 @@ try {
     if ($stmt->rowCount() > 0) {
         $student = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        // Get offense counts from violation database
-        $violationConn = $database->getViolationConnection();
-        if ($violationConn) {
-            $offenseQuery = "SELECT violation_type, offense_count FROM student_violation_offense_counts WHERE student_id = ?";
-            $offenseStmt = $violationConn->prepare($offenseQuery);
-            $offenseStmt->execute([$student_id]);
-            
-            $offenseCounts = [];
-            while ($row = $offenseStmt->fetch(PDO::FETCH_ASSOC)) {
-                $offenseCounts[$row['violation_type']] = (int)$row['offense_count'];
-            }
-            
-            $student['offense_counts'] = $offenseCounts;
+        // Get offense counts from student_offense_counts table
+        $offenseQuery = "SELECT 
+            vt.violation_name as violation_type, 
+            soc.offense_count 
+        FROM student_offense_counts soc 
+        JOIN violation_types vt ON soc.violation_type_id = vt.id 
+        WHERE soc.studentnumber = ?";
+        $offenseStmt = $conn->prepare($offenseQuery);
+        $offenseStmt->execute([$student_id]);
+        
+        $offenseCounts = [];
+        while ($row = $offenseStmt->fetch(PDO::FETCH_ASSOC)) {
+            $offenseCounts[$row['violation_type']] = (int)$row['offense_count'];
         }
+        
+        $student['offense_counts'] = $offenseCounts;
         
         sendResponse(true, "Student found", $student);
     } else {

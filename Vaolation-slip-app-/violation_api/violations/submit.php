@@ -32,13 +32,8 @@ try {
     $conn->beginTransaction();
     
     // Get student info first
-    $rfidConn = $database->getRfidConnection();
-    if (!$rfidConn) {
-        sendResponse(false, "RFID database connection failed");
-    }
-    
-    $studentQuery = "SELECT student_name, year_level, course, section FROM students WHERE student_id = ?";
-    $studentStmt = $rfidConn->prepare($studentQuery);
+    $studentQuery = "SELECT CONCAT_WS(' ', surname, firstname, IFNULL(lastname, '')) as student_name, yearlevel as year_level, course, section FROM students WHERE student_number = ?";
+    $studentStmt = $conn->prepare($studentQuery);
     $studentStmt->execute([$student_id]);
     $student = $studentStmt->fetch(PDO::FETCH_ASSOC);
     
@@ -46,72 +41,67 @@ try {
         sendResponse(false, "Student not found");
     }
     
-    // Process violations and get highest offense count
+    // Parse recorded_by to get role and ID
+    $recorded_by_role = 'guard'; // default
+    $recorded_by_id = 1; // default
+    
+    // Try to extract role from recorded_by string (Admin: Name, Guard: Name, etc.)
+    if (strpos($recorded_by, 'Admin:') === 0 || strpos($recorded_by, 'Teacher:') === 0) {
+        $recorded_by_role = 'admin';
+        // Get admin ID by name (simplified - you might want to pass ID directly)
+        $adminQuery = "SELECT rfid FROM admins WHERE name LIKE ? LIMIT 1";
+        $adminStmt = $conn->prepare($adminQuery);
+        $name = trim(substr($recorded_by, strpos($recorded_by, ':') + 1));
+        $adminStmt->execute(["%$name%"]);
+        if ($adminStmt->rowCount() > 0) {
+            $admin = $adminStmt->fetch(PDO::FETCH_ASSOC);
+            $recorded_by_id = $admin['rfid'];
+        }
+    }
+    
+    // Process each violation - your triggers will handle offense counting
+    $violation_ids = [];
     $highest_offense = 1;
     $penalty = "Warning";
     
-    foreach ($data->violations as $violation_type) {
-        // Get current offense count for this violation type
-        $offenseQuery = "SELECT offense_count FROM student_violation_offense_counts WHERE student_id = ? AND violation_type = ?";
-        $offenseStmt = $conn->prepare($offenseQuery);
-        $offenseStmt->execute([$student_id, $violation_type]);
+    foreach ($data->violations as $violation_name) {
+        // Get violation type ID
+        $typeQuery = "SELECT id FROM violation_types WHERE violation_name = ?";
+        $typeStmt = $conn->prepare($typeQuery);
+        $typeStmt->execute([$violation_name]);
         
-        $current_offense = 1;
-        if ($offenseStmt->rowCount() > 0) {
-            $offense_data = $offenseStmt->fetch(PDO::FETCH_ASSOC);
-            $current_offense = ($offense_data['offense_count'] % 3) + 1; // Cycle 1->2->3->1
+        if ($typeStmt->rowCount() === 0) {
+            continue; // Skip unknown violation types
         }
         
-        // Update offense count
-        $upsertQuery = "INSERT INTO student_violation_offense_counts (student_id, violation_type, offense_count) 
-                       VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE offense_count = ?";
-        $upsertStmt = $conn->prepare($upsertQuery);
-        $upsertStmt->execute([$student_id, $violation_type, $current_offense, $current_offense]);
+        $violation_type = $typeStmt->fetch(PDO::FETCH_ASSOC);
+        $violation_type_id = $violation_type['id'];
         
-        // Track highest offense
-        if ($current_offense > $highest_offense) {
-            $highest_offense = $current_offense;
+        // Insert violation - triggers will handle offense_count and penalty
+        $violationQuery = "INSERT INTO violations (student_number, violation_type_id, recorded_by_role, recorded_by_id) VALUES (?, ?, ?, ?)";
+        $violationStmt = $conn->prepare($violationQuery);
+        $violationStmt->execute([$student_id, $violation_type_id, $recorded_by_role, $recorded_by_id]);
+        
+        $violation_id = $conn->lastInsertId();
+        $violation_ids[] = $violation_id;
+        
+        // Get the offense count that was set by the trigger
+        $getViolationQuery = "SELECT offense_count, penalty FROM violations WHERE violation_id = ?";
+        $getViolationStmt = $conn->prepare($getViolationQuery);
+        $getViolationStmt->execute([$violation_id]);
+        $inserted_violation = $getViolationStmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($inserted_violation['offense_count'] > $highest_offense) {
+            $highest_offense = $inserted_violation['offense_count'];
+            $penalty = $inserted_violation['penalty'] ?: "Warning";
         }
-    }
-    
-    // Get penalty based on highest offense
-    $penaltyQuery = "SELECT penalty_description FROM penalty_matrix WHERE offense_number = ? LIMIT 1";
-    $penaltyStmt = $conn->prepare($penaltyQuery);
-    $penaltyStmt->execute([$highest_offense]);
-    if ($penaltyStmt->rowCount() > 0) {
-        $penalty_data = $penaltyStmt->fetch(PDO::FETCH_ASSOC);
-        $penalty = $penalty_data['penalty_description'];
-    }
-    
-    // Insert violation record
-    $violationQuery = "INSERT INTO violations (student_id, student_name, year_level, course, section, offense_count, penalty, recorded_by) 
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-    $violationStmt = $conn->prepare($violationQuery);
-    $violationStmt->execute([
-        $student_id,
-        $student['student_name'],
-        $student['year_level'],
-        $student['course'],
-        $student['section'],
-        $highest_offense,
-        $penalty,
-        $recorded_by
-    ]);
-    
-    $violation_id = $conn->lastInsertId();
-    
-    // Insert violation details
-    foreach ($data->violations as $violation_type) {
-        $detailQuery = "INSERT INTO violation_details (violation_id, violation_type) VALUES (?, ?)";
-        $detailStmt = $conn->prepare($detailQuery);
-        $detailStmt->execute([$violation_id, $violation_type]);
     }
     
     $conn->commit();
     
     $response_data = [
-        'id' => (int)$violation_id,
-        'offense' => $highest_offense,
+        'violation_id' => count($violation_ids) > 0 ? (int)$violation_ids[0] : 0,
+        'offense_count' => $highest_offense,
         'penalty' => $penalty,
         'message' => $highest_offense . ($highest_offense == 1 ? "st" : ($highest_offense == 2 ? "nd" : "rd")) . " Offense"
     ];

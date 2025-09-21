@@ -135,9 +135,15 @@ class StudentViolationViewModel(
                     .onSuccess { response ->
                         // Update local offense counts after successful submission
                         violations.forEach { violation ->
-                            val nextOffense = getNextOffenseCountForViolation(violation)
+                            val currentFromDatabase = databaseOffenseCounts[violation] ?: 0
+                            val nextOffense = if (currentFromDatabase > 0) {
+                                val calculated = currentFromDatabase + 1
+                                if (calculated > 3) 1 else calculated
+                            } else {
+                                1
+                            }
+                            // Update both local tracking and database tracking
                             violationOffenseCounts[violation] = nextOffense
-                            // Also update database tracking
                             databaseOffenseCounts[violation] = nextOffense
                         }
                         
@@ -167,8 +173,15 @@ class StudentViolationViewModel(
                         
                         // Update local tracking for demo
                         violations.forEach { violation ->
-                            val nextOffense = getNextOffenseCountForViolation(violation)
+                            val currentFromDatabase = databaseOffenseCounts[violation] ?: 0
+                            val nextOffense = if (currentFromDatabase > 0) {
+                                val calculated = currentFromDatabase + 1
+                                if (calculated > 3) 1 else calculated
+                            } else {
+                                1
+                            }
                             violationOffenseCounts[violation] = nextOffense
+                            databaseOffenseCounts[violation] = nextOffense
                         }
                         
                         _uiState.value = _uiState.value.copy(
@@ -200,18 +213,9 @@ class StudentViolationViewModel(
     }
     
     fun getOffenseCount(violation: String): Int {
-        return if (_uiState.value.selectedViolations.contains(violation)) {
-            // Get current offense count for this specific violation type
-            // Priority: database > local tracking > default (1)
-            getNextOffenseCountForViolation(violation)
-        } else {
-            // If violation is not selected, return 0
-            0
-        }
-    }
-    
-    private fun getNextOffenseCountForViolation(violation: String): Int {
-        // First try to get the NEXT offense count from database (current + 1)
+        // Always show the NEXT offense count (what will happen if this violation is selected)
+        // Priority: database offense counts > local tracking > default (1)
+        
         val currentFromDatabase = databaseOffenseCounts[violation] ?: 0
         
         if (currentFromDatabase > 0) {
@@ -220,12 +224,8 @@ class StudentViolationViewModel(
             return if (nextOffense > 3) 1 else nextOffense
         }
         
-        // If no database record, use consistent local tracking
-        // This ensures the same violation always shows the same offense count
-        return violationOffenseCounts.getOrPut(violation) {
-            // First time selecting this violation - start with 1st offense
-            1
-        }
+        // If no database record, this would be the first offense
+        return 1
     }
     
     fun getHighestOffenseCount(): Int {
@@ -234,7 +234,13 @@ class StudentViolationViewModel(
         if (selectedViolations.isEmpty()) return 0
         
         return selectedViolations.maxOfOrNull { violation ->
-            getOffenseCount(violation)
+            val currentFromDatabase = databaseOffenseCounts[violation] ?: 0
+            if (currentFromDatabase > 0) {
+                val nextOffense = currentFromDatabase + 1
+                if (nextOffense > 3) 1 else nextOffense
+            } else {
+                1 // First offense
+            }
         } ?: 0
     }
     

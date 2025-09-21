@@ -20,8 +20,14 @@ if (!$conn) {
 }
 
 try {
-    // Get offense counts for student
-    $query = "SELECT violation_type, offense_count FROM student_violation_offense_counts WHERE student_id = ? ORDER BY violation_type";
+    // Get offense counts for student with violation type names
+    $query = "SELECT 
+        vt.violation_name as violation_type, 
+        soc.offense_count 
+    FROM student_offense_counts soc 
+    JOIN violation_types vt ON soc.violation_type_id = vt.id 
+    WHERE soc.studentnumber = ? 
+    ORDER BY vt.violation_name";
     $stmt = $conn->prepare($query);
     $stmt->execute([$student_id]);
     

@@ -29,13 +29,32 @@ if (!$conn) {
 }
 
 try {
-    $query = "SELECT * FROM users WHERE email = :email";
-    $stmt = $conn->prepare($query);
-    $stmt->bindParam(":email", $email);
-    $stmt->execute();
+    // First try to find user in admins table
+    $admin_query = "SELECT rfid as id, name as username, email, password, role, NULL as rfid_code FROM admins WHERE email = :email";
+    $admin_stmt = $conn->prepare($admin_query);
+    $admin_stmt->bindParam(":email", $email);
+    $admin_stmt->execute();
 
-    if ($stmt->rowCount() > 0) {
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    $user = null;
+    $user_type = null;
+
+    if ($admin_stmt->rowCount() > 0) {
+        $user = $admin_stmt->fetch(PDO::FETCH_ASSOC);
+        $user_type = 'admin';
+    } else {
+        // Try to find user in guards table
+        $guard_query = "SELECT id, name as username, email, password, 'guard' as role, NULL as rfid_code FROM guards WHERE email = :email";
+        $guard_stmt = $conn->prepare($guard_query);
+        $guard_stmt->bindParam(":email", $email);
+        $guard_stmt->execute();
+        
+        if ($guard_stmt->rowCount() > 0) {
+            $user = $guard_stmt->fetch(PDO::FETCH_ASSOC);
+            $user_type = 'guard';
+        }
+    }
+
+    if ($user) {
         
         // Secure password verification with backward compatibility
         $password_valid = false;
@@ -51,7 +70,11 @@ try {
                 
                 // Upgrade to hashed password
                 $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-                $update_query = "UPDATE users SET password = :password WHERE id = :id";
+                if ($user_type === 'admin') {
+                    $update_query = "UPDATE admins SET password = :password WHERE rfid = :id";
+                } else {
+                    $update_query = "UPDATE guards SET password = :password WHERE id = :id";
+                }
                 $update_stmt = $conn->prepare($update_query);
                 $update_stmt->bindParam(":password", $hashed_password);
                 $update_stmt->bindParam(":id", $user['id']);

@@ -28,8 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
 
 try {
     $database = new Database();
-    $violations_conn = $database->getViolationsConnection();
-    $rfid_conn = $database->getRfidConnection();
+    $conn = $database->getConnection();
     
     $input = json_decode(file_get_contents('php://input'), true);
     
@@ -50,54 +49,52 @@ try {
     $course = trim($input['course']);
     $section = trim($input['section']);
     
-    // Begin transaction for both databases
-    $violations_conn->beginTransaction();
-    $rfid_conn->beginTransaction();
+    // Begin transaction
+    $conn->beginTransaction();
     
     try {
-        // Update in violations database
-        $update_query = "UPDATE students SET year_level = :year, course = :course, section = :section 
-                        WHERE student_id = :student_id";
+        // Update in the combined database
+        $update_query = "UPDATE students SET yearlevel = :year, course = :course, section = :section, updated_at = NOW() 
+                        WHERE student_number = :student_number";
         
-        $stmt1 = $violations_conn->prepare($update_query);
-        $stmt1->bindParam(':year', $year);
-        $stmt1->bindParam(':course', $course);
-        $stmt1->bindParam(':section', $section);
-        $stmt1->bindParam(':student_id', $student_id);
-        $stmt1->execute();
+        $stmt = $conn->prepare($update_query);
+        $stmt->bindParam(':year', $year);
+        $stmt->bindParam(':course', $course);
+        $stmt->bindParam(':section', $section);
+        $stmt->bindParam(':student_number', $student_id);
+        $stmt->execute();
         
-        // RFID database doesn't store year/course/section, so no update needed
-        // Just mark as successful if violations DB update worked
-        
-        if ($stmt1->rowCount() > 0) {
-            // Commit both transactions
-            $violations_conn->commit();
-            $rfid_conn->commit();
+        if ($stmt->rowCount() > 0) {
+            // Commit transaction
+            $conn->commit();
             
             // Get updated student data
-            $get_student_query = "SELECT * FROM students WHERE student_id = :student_id LIMIT 1";
-            $get_stmt = $violations_conn->prepare($get_student_query);
-            $get_stmt->bindParam(':student_id', $student_id);
+            $get_student_query = "SELECT student_number, surname, firstname, lastname, yearlevel, course, section, created_at, updated_at 
+                                 FROM students WHERE student_number = :student_number LIMIT 1";
+            $get_stmt = $conn->prepare($get_student_query);
+            $get_stmt->bindParam(':student_number', $student_id);
             $get_stmt->execute();
             $student = $get_stmt->fetch(PDO::FETCH_ASSOC);
+            
+            // Construct full name
+            $full_name = trim($student['surname'] . ', ' . $student['firstname'] . ' ' . ($student['lastname'] ?: ''));
             
             echo json_encode(array(
                 "success" => true,
                 "message" => "Student information updated successfully",
                 "student" => array(
-                    "id" => intval($student['id']),
-                    "student_id" => $student['student_id'],
-                    "name" => $student['student_name'],
-                    "year" => $student['year_level'],
-                    "course" => $student['course'],
-                    "section" => $student['section'],
-                    "created_at" => $student['added_at'],
+                    "id" => intval($student['student_number']),
+                    "student_id" => strval($student['student_number']),
+                    "name" => $full_name,
+                    "year" => $student['yearlevel'] ?: '',
+                    "course" => $student['course'] ?: '',
+                    "section" => $student['section'] ?: '',
+                    "created_at" => $student['created_at'],
                     "updated_at" => $student['updated_at']
                 )
             ));
         } else {
-            $violations_conn->rollback();
-            $rfid_conn->rollback();
+            $conn->rollback();
             echo json_encode(array(
                 "success" => false,
                 "message" => "Student not found or no changes made"
@@ -105,8 +102,7 @@ try {
         }
         
     } catch(Exception $e) {
-        $violations_conn->rollback();
-        $rfid_conn->rollback();
+        $conn->rollback();
         throw $e;
     }
     

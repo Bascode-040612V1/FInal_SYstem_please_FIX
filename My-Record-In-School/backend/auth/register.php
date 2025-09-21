@@ -28,8 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 try {
     $database = new Database();
-    $violations_conn = $database->getViolationsConnection();
-    $rfid_conn = $database->getRfidConnection();
+    $conn = $database->getConnection();
     
     $input = json_decode(file_get_contents('php://input'), true);
     
@@ -55,13 +54,28 @@ try {
     $section = trim($input['section']);
     $rfid = isset($input['rfid']) ? trim($input['rfid']) : null; 
     
+    // Parse name into components
+    $name_parts = explode(',', $name, 2);
+    if (count($name_parts) === 2) {
+        $surname = trim($name_parts[0]);
+        $firstname_lastname = trim($name_parts[1]);
+        $name_sub_parts = explode(' ', $firstname_lastname, 2);
+        $firstname = trim($name_sub_parts[0]);
+        $lastname = isset($name_sub_parts[1]) ? trim($name_sub_parts[1]) : '';
+    } else {
+        // Fallback: treat as firstname only
+        $surname = '';
+        $firstname = $name;
+        $lastname = '';
+    }
+    
     // Hash the password for security (but keep backward compatibility)
     $hashed_password = password_hash($password, PASSWORD_DEFAULT);
     
-    // Check if student already exists in violations database
-    $check_query = "SELECT student_id FROM students WHERE student_id = :student_id LIMIT 1";
-    $check_stmt = $violations_conn->prepare($check_query);
-    $check_stmt->bindParam(':student_id', $student_id);
+    // Check if student already exists
+    $check_query = "SELECT student_number FROM students WHERE student_number = :student_number LIMIT 1";
+    $check_stmt = $conn->prepare($check_query);
+    $check_stmt->bindParam(':student_number', $student_id);
     $check_stmt->execute();
     
     if ($check_stmt->rowCount() > 0) {
@@ -72,70 +86,57 @@ try {
         exit();
     }
     
-    // Begin transaction for both databases
-    $violations_conn->beginTransaction();
-    $rfid_conn->beginTransaction();
+    // Begin transaction
+    $conn->beginTransaction();
     
     try {
-        // Insert into violations database with hashed password
-        $insert_query = "INSERT INTO students (student_id, student_name, year_level, course, section, password) 
-                        VALUES (:student_id, :name, :year, :course, :section, :password)";
+        // Insert into the combined database
+        $insert_query = "INSERT INTO students (student_number, surname, firstname, lastname, course, yearlevel, section, rfid, password) 
+                        VALUES (:student_number, :surname, :firstname, :lastname, :course, :yearlevel, :rfid, :password)";
         
-        $stmt1 = $violations_conn->prepare($insert_query);
-        $stmt1->bindParam(':student_id', $student_id);
-        $stmt1->bindParam(':name', $name);
-        $stmt1->bindParam(':password', $hashed_password); // Use hashed password
-        $stmt1->bindParam(':year', $year);
-        $stmt1->bindParam(':course', $course);
-        $stmt1->bindParam(':section', $section);
-        $stmt1->execute();
-
-        //Insert into rfid_system database
-        if ($rfid) {
-    $rfid_insert_query = "INSERT INTO students (name, student_number, rfid) 
-                          VALUES (:name, :student_number, :rfid)";
-    $rfid_stmt = $rfid_conn->prepare($rfid_insert_query);
-    $rfid_stmt->bindParam(':name', $name);
-    $rfid_stmt->bindParam(':student_number', $student_id);
-    $rfid_stmt->bindParam(':rfid', $rfid);
-    $rfid_stmt->execute();
-}
-
-        $violations_student_id = $violations_conn->lastInsertId();
+        $stmt = $conn->prepare($insert_query);
+        $stmt->bindParam(':student_number', $student_id);
+        $stmt->bindParam(':surname', $surname);
+        $stmt->bindParam(':firstname', $firstname);
+        $stmt->bindParam(':lastname', $lastname);
+        $stmt->bindParam(':course', $course);
+        $stmt->bindParam(':yearlevel', $year);
+        $stmt->bindParam(':rfid', $rfid);
+        $stmt->bindParam(':password', $hashed_password);
+        $stmt->execute();
         
-     
-        
-        // Commit both transactions
-        $violations_conn->commit();
-        $rfid_conn->commit();
+        // Commit transaction
+        $conn->commit();
         
         // Get the created student data for response
-        $get_student_query = "SELECT id, student_id, student_name, year_level, course, section, added_at, updated_at 
-                             FROM students WHERE student_id = :student_id LIMIT 1";
-        $get_stmt = $violations_conn->prepare($get_student_query);
-        $get_stmt->bindParam(':student_id', $student_id);
+        $get_student_query = "SELECT student_number, surname, firstname, lastname, course, yearlevel as year_level, section, created_at, updated_at 
+                             FROM students WHERE student_number = :student_number LIMIT 1";
+        $get_stmt = $conn->prepare($get_student_query);
+        $get_stmt->bindParam(':student_number', $student_id);
         $get_stmt->execute();
         $student = $get_stmt->fetch(PDO::FETCH_ASSOC);
+        
+        // Construct full name for response
+        $full_name = trim($student['surname'] . ', ' . $student['firstname'] . ' ' . ($student['lastname'] ?: ''));
         
         echo json_encode(array(
             "success" => true,
             "message" => "Registration successful",
             "student" => array(
-                "id" => intval($student['id']),
-                "student_id" => $student['student_id'],
-                "name" => $student['student_name'],
-                "year" => $student['year_level'],
-                "course" => $student['course'],
-                "section" => $student['section'],
-                "created_at" => $student['added_at'] ?? date('Y-m-d H:i:s'),
-                "updated_at" => $student['updated_at'] ?? date('Y-m-d H:i:s')
+                "id" => intval($student['student_number']),
+                "student_id" => strval($student['student_number']),
+                "name" => $full_name,
+                "year" => $student['year_level'] ?: '',
+                "course" => $student['course'] ?: '',
+                "section" => $student['section'] ?: '',
+                "created_at" => $student['created_at'] ?: date('Y-m-d H:i:s'),
+                "updated_at" => $student['updated_at'] ?: date('Y-m-d H:i:s')
             )
         ));
         
     } catch(Exception $e) {
-        // Rollback both transactions
-        $violations_conn->rollback();
-        $rfid_conn->rollback();
+        // Rollback transaction
+        $conn->rollback();
         throw $e;
     }
     

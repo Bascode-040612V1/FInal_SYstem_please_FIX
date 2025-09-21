@@ -1,6 +1,14 @@
-# My Record in School - Backend API
+# My Record in School - Backend API (Updated for Combined Database)
 
-This is the backend API for the My Record in School Android application. It provides REST endpoints for student authentication, violation tracking, and attendance management.
+This is the updated backend API for the My Record in School Android application. It now uses a single combined database (`aics_bicutan_system_db`) instead of separate databases.
+
+## 🆕 What's New
+
+- **Combined Database**: Single database `aics_bicutan_system_db` instead of separate `student_violation_db` and `rfid_system`
+- **Enhanced Schema**: Better normalized structure with proper relationships
+- **Automated Triggers**: Offense count tracking with automatic penalty calculation
+- **Multi-role Support**: Supports admins, guards, and students
+- **Improved Security**: Better password hashing and data validation
 
 ## Setup Instructions
 
@@ -10,17 +18,10 @@ This is the backend API for the My Record in School Android application. It prov
 
 ### 2. Database Setup
 1. Open phpMyAdmin (http://localhost/phpmyadmin)
-2. **Import the provided database schemas:**
-   
-   **For student_violation_db:**
-   - Create new database: `student_violation_db`
-   - Import: `my Actual Database SQL/student_violation_db (1).sql`
-   
-   **For rfid_system:**
-   - Create new database: `rfid_system`
-   - Import: `my Actual Database SQL/rfid_system.sql`
-
-3. This will create both databases with all tables, relationships, and sample data
+2. **Import the new combined database:**
+   - Create new database: `aics_bicutan_system_db`
+   - Import: `database.sql` (from project root)
+3. This will create the new combined database with all tables, relationships, triggers, and sample data
 
 ### 3. Backend Deployment
 1. Copy the entire `backend` folder to your XAMPP `htdocs` directory
@@ -28,16 +29,53 @@ This is the backend API for the My Record in School Android application. It prov
    - Path: `/Applications/XAMPP/htdocs/backend` (Mac)
 2. Ensure proper file permissions (755 for directories, 644 for files)
 
-### 4. Configuration
-1. Edit `config/database.php` if needed to match your database credentials:
-   ```php
-   private $host = "localhost";
-   private $username = "root";
-   private $password = "";
-   ```
+### 4. Migration and Testing
+1. **Test Connection**: Visit `http://localhost:8080/backend/test_connection.php`
+2. **Run Migration**: Visit `http://localhost:8080/backend/migrate_to_combined_db.php`
+3. **Test APIs**: Open `http://localhost:8080/backend/test_combined_api.html`
 
-### 5. Testing the API
-Visit `http://localhost:8080/backend/test_connection.php` to test database connections.
+## Database Schema
+
+### Key Tables
+
+#### students
+- `student_number` - Primary key (INT)
+- `surname`, `firstname`, `lastname` - Name components
+- `course`, `yearlevel`, `section` - Academic info
+- `rfid` - RFID tag for attendance
+- `password` - Hashed password
+- `image` - Profile image path
+- `created_at`, `updated_at` - Timestamps
+
+#### violations
+- `violation_id` - Primary key
+- `student_number` - Foreign key to students
+- `violation_type_id` - Foreign key to violation_types
+- `offense_count` - Auto-calculated (1-3, cycles)
+- `penalty` - Auto-calculated from penalty_matrix
+- `recorded_by_role` - 'admin' or 'guard'
+- `recorded_by_id` - ID of recording staff
+- `acknowledged` - Student acknowledgment status
+- `created_at` - Timestamp
+
+#### attendance
+- `attendance_id` - Primary key
+- `student_number` - Foreign key to students
+- `time_in`, `time_out` - Entry/exit times
+- `date` - Attendance date
+- `status` - Present/Absent
+- `created_at` - Timestamp
+
+#### violation_types
+- `id` - Primary key
+- `violation_name` - Name of violation
+- `category` - Dress Code, Conduct, Minor, Major, etc.
+- `severity_level` - Severity classification
+- `default_penalty` - Default penalty description
+
+#### penalty_matrix
+- Maps `violation_type_id` + `offense_count` → `penalty_description`
+- Enables flexible penalty management
 
 ## API Endpoints
 
@@ -64,11 +102,12 @@ http://localhost:8080/backend/
   ```json
   {
     "student_id": "2023004",
-    "name": "New Student",
+    "name": "Surname, Firstname Lastname",
     "password": "2023004",
     "year": "Grade 11",
     "course": "ICT",
-    "section": "IC1MA"
+    "section": "IC1MA",
+    "rfid": "RFID12348" // optional
   }
   ```
 
@@ -91,6 +130,9 @@ http://localhost:8080/backend/
 #### Get Student Violations
 - **GET** `/violations/{student_id}`
 - **Example:** `/violations/2023001`
+- **Optional Query Parameters:**
+  - `since` - Timestamp for delta sync
+  - `limit` - Limit number of results
 
 #### Acknowledge Violation
 - **PUT** `/violations/acknowledge/{violation_id}`
@@ -104,79 +146,72 @@ http://localhost:8080/backend/
 - **Parameters:**
   - `month` (optional): Month number (1-12)
   - `year` (optional): Year (e.g., 2024)
+  - `since` (optional): Timestamp for delta sync
+  - `limit` (optional): Limit results
 
 ### System
 
 #### Test Connection
 - **GET** `/test_connection.php`
-- Tests both database connections
+- Tests database connection
+
+#### Migration
+- **GET** `/migrate_to_combined_db.php`
+- Populates database with sample data
+
+## Enhanced Features
+
+### 1. Automated Violation Processing
+- **Triggers**: Automatically calculate offense counts (1→2→3→1 cycle)
+- **Penalty Matrix**: Auto-assign penalties based on violation type and offense count
+- **Category Mapping**: Maps database categories to app-expected categories
+
+### 2. Multi-Role Support
+- **Admins**: Full system access
+- **Guards**: Can record violations
+- **Students**: View their own records
+
+### 3. Enhanced Security
+- **Password Hashing**: Uses PHP's `password_hash()` with `PASSWORD_DEFAULT`
+- **Prepared Statements**: All queries use prepared statements
+- **Input Validation**: Comprehensive input validation
+- **CORS Support**: Proper CORS headers for web/mobile access
+
+### 4. Performance Optimizations
+- **Delta Sync**: Support for incremental data synchronization
+- **Query Optimization**: Efficient queries with proper indexing
+- **Pagination**: Optional limit parameters for large datasets
+
+## Sample Data
+
+The migration script includes:
+- **3 Sample Students**: 2023001, 2023002, 2023003
+- **Sample Violations**: Various violation types with proper categorization
+- **Sample Attendance**: Current date attendance records
+- **Pre-populated Violation Types**: Complete violation and penalty matrix
 
 ## File Structure
 
 ```
 backend/
 ├── config/
-│   └── database.php          # Database configuration and connection
-├── database/
-│   └── schema.sql           # Database schema and sample data
+│   └── database.php              # Updated database configuration
 ├── auth/
-│   ├── login.php            # Student login endpoint
-│   └── register.php         # Student registration endpoint
+│   ├── login.php                 # Updated login endpoint
+│   └── register.php              # Updated registration endpoint
 ├── student/
-│   └── update.php           # Update student information
+│   └── update.php                # Updated student update endpoint
 ├── violations/
-│   ├── index.php            # Get student violations
-│   └── acknowledge.php      # Acknowledge violation
+│   ├── index.php                 # Updated violations endpoint
+│   └── acknowledge.php           # Updated acknowledge endpoint
 ├── attendance/
-│   └── index.php            # Get student attendance
-├── test_connection.php      # Database connection test
-├── index.php               # Main router (optional)
-└── README.md               # This file
+│   └── index.php                 # Updated attendance endpoint
+├── test_connection.php           # Database connection test
+├── migrate_to_combined_db.php    # 🆕 Sample data migration
+├── test_combined_api.html        # 🆕 Comprehensive API test interface
+├── README.md                     # This updated documentation
+└── [other legacy files...]       # Older test files (still functional)
 ```
-
-## Database Schema
-
-### student_violation_db.students
-- `id` - Primary key
-- `student_id` - Unique student identifier
-- `name` - Full name
-- `password` - Password (same as student_id)
-- `year` - Academic year
-- `course` - Course/Strand
-- `section` - Class section
-- `created_at` - Created timestamp
-- `updated_at` - Updated timestamp
-
-### student_violation_db.violations
-- `id` - Primary key
-- `student_id` - Foreign key to students
-- `violation_type` - Type of violation
-- `violation_description` - Description
-- `offense_count` - Number of offense (1st, 2nd, 3rd+)
-- `penalty` - Applied penalty
-- `recorded_by` - Staff member name
-- `date_recorded` - When recorded
-- `acknowledged` - Whether student acknowledged (0/1)
-- `category` - Violation category
-
-### rfid_system.students
-- Same structure as violation database for consistency
-
-### rfid_system.attendance
-- `id` - Primary key
-- `student_id` - Foreign key to students
-- `date` - Attendance date
-- `time_in` - Entry time
-- `time_out` - Exit time
-- `status` - PRESENT/ABSENT/LATE
-- `created_at` - Record timestamp
-
-## Sample Data
-
-The schema includes sample data for testing:
-- 3 sample students (2023001, 2023002, 2023003)
-- Sample violations for testing
-- Sample attendance records for current month
 
 ## Error Handling
 

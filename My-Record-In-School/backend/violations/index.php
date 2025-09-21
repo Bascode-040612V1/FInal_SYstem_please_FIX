@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 
 try {
     $database = new Database();
-    $conn = $database->getViolationsConnection();
+    $conn = $database->getConnection();
     
     // Get student_id from URL path
     $path_info = $_SERVER['PATH_INFO'] ?? '';
@@ -52,14 +52,24 @@ try {
     if ($since_timestamp > 0) {
         // Delta sync - only get records modified since timestamp
         $since_date = date('Y-m-d H:i:s', $since_timestamp / 1000);
-        $query = "SELECT v.id, v.student_id, v.student_name, v.year_level, v.course, v.section,
-                         v.offense_count, v.penalty, v.recorded_by, v.recorded_at, v.acknowledged,
-                         GROUP_CONCAT(DISTINCT vd.violation_type ORDER BY vd.id SEPARATOR ', ') as violations_list
+        $query = "SELECT v.violation_id as id, v.student_number as student_id, 
+                         CONCAT(s.surname, ', ', s.firstname, ' ', COALESCE(s.lastname, '')) as student_name,
+                         s.yearlevel as year_level, s.course, s.section,
+                         v.offense_count, v.penalty, 
+                         CASE 
+                             WHEN v.recorded_by_role = 'admin' THEN CONCAT('Admin ID: ', v.recorded_by_id)
+                             WHEN v.recorded_by_role = 'guard' THEN CONCAT('Guard ID: ', v.recorded_by_id)
+                             ELSE 'System'
+                         END as recorded_by,
+                         v.created_at as recorded_at, v.acknowledged,
+                         vt.violation_name as violation_type,
+                         v.violation_description,
+                         vt.category
                   FROM violations v 
-                  LEFT JOIN violation_details vd ON v.id = vd.violation_id
-                  WHERE v.student_id = :student_id AND v.recorded_at > :since_date
-                  GROUP BY v.id
-                  ORDER BY v.recorded_at DESC";
+                  LEFT JOIN students s ON v.student_number = s.student_number
+                  LEFT JOIN violation_types vt ON v.violation_type_id = vt.id
+                  WHERE v.student_number = :student_id AND v.created_at > :since_date
+                  ORDER BY v.created_at DESC";
         if ($limit > 0) {
             $query .= " LIMIT :limit";
         }
@@ -71,18 +81,27 @@ try {
         }
     } else {
         // Full sync with optional limit
-        $query = "SELECT v.id, v.student_id, v.student_name, v.year_level, v.course, v.section,
-                         v.offense_count, v.penalty, v.recorded_by, v.recorded_at, v.acknowledged,
-                         GROUP_CONCAT(DISTINCT vd.violation_type ORDER BY vd.id SEPARATOR ', ') as violations_list,
+        $query = "SELECT v.violation_id as id, v.student_number as student_id, 
+                         CONCAT(s.surname, ', ', s.firstname, ' ', COALESCE(s.lastname, '')) as student_name,
+                         s.yearlevel as year_level, s.course, s.section,
+                         v.offense_count, v.penalty, 
+                         CASE 
+                             WHEN v.recorded_by_role = 'admin' THEN CONCAT('Admin ID: ', v.recorded_by_id)
+                             WHEN v.recorded_by_role = 'guard' THEN CONCAT('Guard ID: ', v.recorded_by_id)
+                             ELSE 'System'
+                         END as recorded_by,
+                         v.created_at as recorded_at, v.acknowledged,
+                         vt.violation_name as violation_type,
+                         v.violation_description,
+                         vt.category,
                          COALESCE((SELECT MAX(soc.offense_count) 
-                                  FROM student_violation_offense_counts soc 
-                                  INNER JOIN violation_details vd2 ON vd2.violation_type = soc.violation_type 
-                                  WHERE vd2.violation_id = v.id AND soc.student_id = v.student_id), v.offense_count) as highest_offense_count
+                                  FROM student_offense_counts soc 
+                                  WHERE soc.studentnumber = v.student_number AND soc.violation_type_id = v.violation_type_id), v.offense_count) as highest_offense_count
                   FROM violations v 
-                  LEFT JOIN violation_details vd ON v.id = vd.violation_id
-                  WHERE v.student_id = :student_id 
-                  GROUP BY v.id
-                  ORDER BY v.recorded_at DESC";
+                  LEFT JOIN students s ON v.student_number = s.student_number
+                  LEFT JOIN violation_types vt ON v.violation_type_id = vt.id
+                  WHERE v.student_number = :student_id 
+                  ORDER BY v.created_at DESC";
         if ($limit > 0) {
             $query .= " LIMIT :limit";
         }
@@ -97,45 +116,42 @@ try {
     
     $violations = array();
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        // Determine category based on violation types
+        // Map the new category system to the app's expected categories
         $category = "MINOR_OFFENSE"; // Default
-        $violations_list = $row['violations_list'] ?? "";
+        $db_category = strtoupper($row['category'] ?? '');
         
-        // Categorize based on violation types
-        if (strpos($violations_list, 'No ID') !== false || 
-            strpos($violations_list, 'Improper wearing of uniform') !== false ||
-            strpos($violations_list, 'rubber slippers') !== false ||
-            strpos($violations_list, 'earring') !== false ||
-            strpos($violations_list, 'haircut') !== false) {
-            $category = "DRESS_CODE_VIOLATION";
-        } elseif (strpos($violations_list, 'Cutting Classes') !== false ||
-                  strpos($violations_list, 'Cheating') !== false ||
-                  strpos($violations_list, 'Gambling') !== false ||
-                  strpos($violations_list, 'cellphone') !== false ||
-                  strpos($violations_list, 'Smoking') !== false) {
-            $category = "CONDUCT_VIOLATION";
-        } elseif (strpos($violations_list, 'Stealing') !== false ||
-                  strpos($violations_list, 'Vandalism') !== false ||
-                  strpos($violations_list, 'assault') !== false ||
-                  strpos($violations_list, 'Drugs') !== false ||
-                  strpos($violations_list, 'Liquor') !== false ||
-                  strpos($violations_list, 'fraternity') !== false) {
-            $category = "MAJOR_OFFENSE";
+        // Map database categories to app categories
+        switch ($db_category) {
+            case 'DRESS CODE':
+                $category = "DRESS_CODE_VIOLATION";
+                break;
+            case 'CONDUCT':
+                $category = "CONDUCT_VIOLATION";
+                break;
+            case 'MINOR':
+                $category = "MINOR_OFFENSE";
+                break;
+            case 'MAJOR':
+            case 'SEVERE':
+                $category = "MAJOR_OFFENSE";
+                break;
+            default:
+                $category = "MINOR_OFFENSE";
         }
         
         $violations[] = array(
             "id" => intval($row['id']),
-            "student_id" => $row['student_id'],
-            "student_name" => $row['student_name'],
-            "year_level" => $row['year_level'],
-            "course" => $row['course'],
-            "section" => $row['section'],
-            "violation_type" => $violations_list ?: "No specific violation",
-            "violation_description" => $violations_list ?: "Multiple violations",
+            "student_id" => strval($row['student_id']),
+            "student_name" => $row['student_name'] ?: '',
+            "year_level" => $row['year_level'] ?: '',
+            "course" => $row['course'] ?: '',
+            "section" => $row['section'] ?: '',
+            "violation_type" => $row['violation_type'] ?: "Unknown Violation",
+            "violation_description" => $row['violation_description'] ?: $row['violation_type'] ?: "No description available",
             "offense_count" => intval($row['highest_offense_count'] ?? $row['offense_count']),
             "original_offense_count" => intval($row['offense_count']),
             "penalty" => $row['penalty'] ?: "Warning",
-            "recorded_by" => $row['recorded_by'],
+            "recorded_by" => $row['recorded_by'] ?: "System",
             "date_recorded" => $row['recorded_at'],
             "acknowledged" => intval($row['acknowledged']),
             "category" => $category

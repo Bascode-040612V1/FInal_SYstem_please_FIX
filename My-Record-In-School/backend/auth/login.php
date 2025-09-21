@@ -28,8 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 try {
     $database = new Database();
-    $violations_conn = $database->getViolationsConnection();
-    $rfid_conn = $database->getRfidConnection();
+    $conn = $database->getConnection();
     
     $input = json_decode(file_get_contents('php://input'), true);
     
@@ -44,11 +43,11 @@ try {
     $student_id = $input['student_id'];
     $password = $input['password'];
     
-    // Check in violations database first (this is where login credentials are stored)
-    $query = "SELECT id, student_id, student_name, year_level, course, section, password, added_at, updated_at 
-              FROM students WHERE student_id = :student_id LIMIT 1";
-    $stmt = $violations_conn->prepare($query);
-    $stmt->bindParam(':student_id', $student_id);
+    // Check in the combined database students table
+    $query = "SELECT student_number, surname, firstname, lastname, course, yearlevel, section, password, created_at, updated_at 
+              FROM students WHERE student_number = :student_number LIMIT 1";
+    $stmt = $conn->prepare($query);
+    $stmt->bindParam(':student_number', $student_id);
     $stmt->execute();
     
     if ($stmt->rowCount() > 0) {
@@ -65,30 +64,26 @@ try {
                 $password_valid = true;
             }
         } else {
-            // No password set, check if password matches student_id (default behavior)
+            // No password set, check if password matches student_number (default behavior)
             $password_valid = ($password === $student_id);
         }
         
         if ($password_valid) {
-            // Ensure student exists in RFID database for attendance tracking
-            try {
-                $database->syncStudentData($student_id, $student['student_name'], $student['id']);
-            } catch(Exception $sync_error) {
-                // Log sync error but don't fail login
-                error_log("Student sync failed: " . $sync_error->getMessage());
-            }
+            // Construct full name
+            $full_name = trim($student['surname'] . ', ' . $student['firstname'] . ' ' . ($student['lastname'] ?: ''));
+            
             echo json_encode(array(
                 "success" => true,
                 "message" => "Login successful",
                 "student" => array(
-                    "id" => intval($student['id']),
-                    "student_id" => $student['student_id'],
-                    "name" => $student['student_name'],
-                    "year" => $student['year_level'],
-                    "course" => $student['course'],
-                    "section" => $student['section'],
-                    "created_at" => $student['added_at'] ?? date('Y-m-d H:i:s'),
-                    "updated_at" => $student['updated_at'] ?? date('Y-m-d H:i:s')
+                    "id" => intval($student['student_number']),
+                    "student_id" => strval($student['student_number']),
+                    "name" => $full_name,
+                    "year" => $student['yearlevel'] ?: '',
+                    "course" => $student['course'] ?: '',
+                    "section" => $student['section'] ?: '',
+                    "created_at" => $student['created_at'] ?: date('Y-m-d H:i:s'),
+                    "updated_at" => $student['updated_at'] ?: date('Y-m-d H:i:s')
                 )
             ));
         } else {

@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
 
 try {
     $database = new Database();
-    $conn = $database->getViolationsConnection();
+    $conn = $database->getConnection();
     
     // Get violation_id from URL path
     $path_info = $_SERVER['PATH_INFO'] ?? '';
@@ -45,7 +45,7 @@ try {
     $violation_id = intval($path_parts[0]);
     
     // Update violation acknowledgment
-    $query = "UPDATE violations SET acknowledged = 1 WHERE id = :violation_id";
+    $query = "UPDATE violations SET acknowledged = 1, acknowledged_at = NOW() WHERE violation_id = :violation_id";
     $stmt = $conn->prepare($query);
     $stmt->bindParam(':violation_id', $violation_id);
     $stmt->execute();

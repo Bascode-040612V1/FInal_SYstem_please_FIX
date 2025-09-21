@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 
 try {
     $database = new Database();
-    $conn = $database->getRfidConnection();
+    $conn = $database->getConnection();
     
     // Get student_id from URL path
     $path_info = $_SERVER['PATH_INFO'] ?? '';
@@ -50,95 +50,41 @@ try {
     $since_timestamp = isset($_GET['since']) ? intval($_GET['since']) : 0;
     $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 0;
     
-    // Get student from RFID database
-    $student_query = "SELECT id, name, student_number FROM students WHERE student_number = :student_number LIMIT 1";
+    // Get student from the combined database
+    $student_query = "SELECT student_number, CONCAT(surname, ', ', firstname, ' ', COALESCE(lastname, '')) as name 
+                      FROM students WHERE student_number = :student_number LIMIT 1";
     $student_stmt = $conn->prepare($student_query);
     $student_stmt->bindParam(':student_number', $student_number);
     $student_stmt->execute();
     
     if ($student_stmt->rowCount() == 0) {
-        // Try to sync from violations database
-        $violations_conn = $database->getViolationsConnection();
-        $violations_query = "SELECT student_id, student_name FROM students WHERE student_id = :student_id LIMIT 1";
-        $violations_stmt = $violations_conn->prepare($violations_query);
-        $violations_stmt->bindParam(':student_id', $student_number);
-        $violations_stmt->execute();
-        
-        if ($violations_stmt->rowCount() > 0) {
-            $violations_student = $violations_stmt->fetch(PDO::FETCH_ASSOC);
-            try {
-                $database->syncStudentData($student_number, $violations_student['student_name']);
-                $student_stmt->execute();
-                if ($student_stmt->rowCount() > 0) {
-                    $student_data = $student_stmt->fetch(PDO::FETCH_ASSOC);
-                    $rfid_student_id = $student_data['id'];
-                    $student_name = $student_data['name'];
-                } else {
-                    echo json_encode(array("success" => true, "message" => "Student synchronized but no attendance data", "attendance" => array()));
-                    exit();
-                }
-            } catch (Exception $sync_error) {
-                echo json_encode(array("success" => true, "message" => "Sync failed: " . $sync_error->getMessage(), "attendance" => array()));
-                exit();
-            }
-        } else {
-            echo json_encode(array("success" => true, "message" => "Student not found", "attendance" => array()));
-            exit();
-        }
-    } else {
-        $student_data = $student_stmt->fetch(PDO::FETCH_ASSOC);
-        $rfid_student_id = $student_data['id'];
-        $student_name = $student_data['name'];
+        echo json_encode(array("success" => true, "message" => "Student not found", "attendance" => array()));
+        exit();
     }
+    
+    $student_data = $student_stmt->fetch(PDO::FETCH_ASSOC);
+    $student_name = $student_data['name'];
 
     // Build optimized attendance query
     if ($since_timestamp > 0) {
         // Delta sync - only get records since timestamp
         $since_date = date('Y-m-d', $since_timestamp / 1000);
-        $query = "
-            SELECT *
-            FROM (
-                SELECT a.id, a.student_id, a.time_in, a.time_out, a.date, 
-                       s.name as student_name, s.student_number,
-                       'regular' as attendance_type
-                FROM attendance a 
-                JOIN students s ON a.student_id = s.id 
-                WHERE a.student_id = :student_id AND a.date > :since_date
-
-                UNION ALL
-
-                SELECT sa.id, sa.student_id, sa.saved_time_in as time_in, sa.saved_time_out as time_out, 
-                       sa.saved_date as date, sa.name as student_name, sa.student_number,
-                       'saved' as attendance_type
-                FROM saved_attendance sa 
-                WHERE sa.student_id = :student_id AND sa.saved_date > :since_date
-            ) AS combined
-            WHERE 1=1
-        ";
-        $params = [':student_id' => $rfid_student_id, ':since_date' => $since_date];
+        $query = "SELECT a.attendance_id as id, a.student_number, a.time_in, a.time_out, a.date, 
+                         s.surname, s.firstname, s.lastname,
+                         'regular' as attendance_type
+                  FROM attendance a 
+                  JOIN students s ON a.student_number = s.student_number 
+                  WHERE a.student_number = :student_number AND a.date > :since_date";
+        $params = [':student_number' => $student_number, ':since_date' => $since_date];
     } else {
         // Full sync with optional date filters
-        $query = "
-            SELECT *
-            FROM (
-                SELECT a.id, a.student_id, a.time_in, a.time_out, a.date, 
-                       s.name as student_name, s.student_number,
-                       'regular' as attendance_type
-                FROM attendance a 
-                JOIN students s ON a.student_id = s.id 
-                WHERE a.student_id = :student_id
-
-                UNION ALL
-
-                SELECT sa.id, sa.student_id, sa.saved_time_in as time_in, sa.saved_time_out as time_out, 
-                       sa.saved_date as date, sa.name as student_name, sa.student_number,
-                       'saved' as attendance_type
-                FROM saved_attendance sa 
-                WHERE sa.student_id = :student_id
-            ) AS combined
-            WHERE 1=1
-        ";
-        $params = [':student_id' => $rfid_student_id];
+        $query = "SELECT a.attendance_id as id, a.student_number, a.time_in, a.time_out, a.date, 
+                         s.surname, s.firstname, s.lastname,
+                         'regular' as attendance_type
+                  FROM attendance a 
+                  JOIN students s ON a.student_number = s.student_number 
+                  WHERE a.student_number = :student_number";
+        $params = [':student_number' => $student_number];
     }
 
     // Add month/year filters
@@ -171,6 +117,9 @@ try {
     
     $attendance = array();
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        // Construct full name
+        $full_name = trim(($row['surname'] ?? '') . ', ' . ($row['firstname'] ?? '') . ' ' . ($row['lastname'] ?? ''));
+        
         // Determine status based on time_in
         $status = "ABSENT";
         $time_in_formatted = null;
@@ -212,9 +161,9 @@ try {
         
         $attendance[] = array(
             "id" => intval($row['id']),
-            "student_id" => $student_number,
-            "student_name" => $row['student_name'] ?: $student_name,
-            "student_number" => $row['student_number'] ?: $student_number,
+            "student_id" => strval($student_number),
+            "student_name" => $full_name ?: $student_name,
+            "student_number" => strval($student_number),
             "date" => $row['date'],
             "time_in" => $time_in_formatted,
             "time_out" => $time_out_formatted,

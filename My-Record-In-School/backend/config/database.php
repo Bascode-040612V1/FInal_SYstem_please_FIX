@@ -4,18 +4,16 @@
 
 class Database {
     private $host = "localhost";
-    private $db_name_violations = "student_violation_db";
-    private $db_name_rfid = "rfid_system";
+    private $db_name = "aics_bicutan_system_db";
     private $username = "root";
     private $password = "";
-    public $conn_violations;
-    public $conn_rfid;
+    public $conn;
 
-    public function getViolationsConnection() {
-        $this->conn_violations = null;
+    public function getConnection() {
+        $this->conn = null;
         try {
-            $this->conn_violations = new PDO(
-                "mysql:host=" . $this->host . ";dbname=" . $this->db_name_violations . ";charset=utf8mb4",
+            $this->conn = new PDO(
+                "mysql:host=" . $this->host . ";dbname=" . $this->db_name . ";charset=utf8mb4",
                 $this->username,
                 $this->password,
                 array(
@@ -29,68 +27,47 @@ class Database {
             http_response_code(500);
             echo json_encode(array(
                 "success" => false,
-                "message" => "Violations database connection error: " . $exception->getMessage(),
+                "message" => "Database connection error: " . $exception->getMessage(),
                 "error_code" => $exception->getCode()
             ));
             exit();
         }
-        return $this->conn_violations;
+        return $this->conn;
     }
 
+    // Backward compatibility methods
+    public function getViolationsConnection() {
+        return $this->getConnection();
+    }
+    
     public function getRfidConnection() {
-        $this->conn_rfid = null;
-        try {
-            $this->conn_rfid = new PDO(
-                "mysql:host=" . $this->host . ";dbname=" . $this->db_name_rfid . ";charset=utf8mb4",
-                $this->username,
-                $this->password,
-                array(
-                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                    PDO::ATTR_EMULATE_PREPARES => false,
-                    PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4"
-                )
-            );
-        } catch(PDOException $exception) {
-            http_response_code(500);
-            echo json_encode(array(
-                "success" => false,
-                "message" => "RFID database connection error: " . $exception->getMessage(),
-                "error_code" => $exception->getCode()
-            ));
-            exit();
-        }
-        return $this->conn_rfid;
+        return $this->getConnection();
     }
 
     public function testConnections() {
         try {
-            // Test violations database
-            $violations_conn = $this->getViolationsConnection();
-            $violations_test = $violations_conn->query("SELECT COUNT(*) as count FROM students");
+            // Test the combined database
+            $conn = $this->getConnection();
+            $students_test = $conn->query("SELECT COUNT(*) as count FROM students");
+            $students_result = $students_test->fetch(PDO::FETCH_ASSOC);
+            
+            $violations_test = $conn->query("SELECT COUNT(*) as count FROM violations");
             $violations_result = $violations_test->fetch(PDO::FETCH_ASSOC);
             
-            // Test RFID database
-            $rfid_conn = $this->getRfidConnection();
-            $rfid_test = $rfid_conn->query("SELECT COUNT(*) as count FROM students");
-            $rfid_result = $rfid_test->fetch(PDO::FETCH_ASSOC);
+            $attendance_test = $conn->query("SELECT COUNT(*) as count FROM attendance");
+            $attendance_result = $attendance_test->fetch(PDO::FETCH_ASSOC);
             
-            if ($violations_test && $rfid_test) {
-                return array(
-                    "success" => true,
-                    "message" => "Both databases connected successfully",
-                    "details" => array(
-                        "violations_db" => "Connected - " . $violations_result['count'] . " students",
-                        "rfid_db" => "Connected - " . $rfid_result['count'] . " students",
-                        "timestamp" => date('Y-m-d H:i:s')
-                    )
-                );
-            } else {
-                return array(
-                    "success" => false,
-                    "message" => "Failed to connect to one or both databases"
-                );
-            }
+            return array(
+                "success" => true,
+                "message" => "Combined database connected successfully",
+                "details" => array(
+                    "database" => $this->db_name,
+                    "students" => $students_result['count'] . " students",
+                    "violations" => $violations_result['count'] . " violations",
+                    "attendance" => $attendance_result['count'] . " attendance records",
+                    "timestamp" => date('Y-m-d H:i:s')
+                )
+            );
         } catch(Exception $e) {
             return array(
                 "success" => false,
@@ -103,42 +80,24 @@ class Database {
         }
     }
     
-    // Helper method to synchronize student data between databases
-    public function syncStudentData($student_id, $student_name, $violations_db_id = null, $rfid_number = null) {
+    // Helper method to ensure student exists and get student_number
+    public function ensureStudentExists($student_number) {
         try {
-            $rfid_conn = $this->getRfidConnection();
+            $conn = $this->getConnection();
             
-            // Check if student exists in RFID database
-            $check_query = "SELECT id FROM students WHERE student_number = :student_number LIMIT 1";
-            $check_stmt = $rfid_conn->prepare($check_query);
-            $check_stmt->bindParam(':student_number', $student_id);
+            // Check if student exists
+            $check_query = "SELECT student_number FROM students WHERE student_number = :student_number LIMIT 1";
+            $check_stmt = $conn->prepare($check_query);
+            $check_stmt->bindParam(':student_number', $student_number);
             $check_stmt->execute();
             
-            if ($check_stmt->rowCount() == 0) {
-                // Student doesn't exist in RFID database, create them
-                $insert_query = "INSERT INTO students (name, student_number, rfid, image) 
-                               VALUES (:name, :student_number, :rfid, 'assets/default-profile.png')";
-                $insert_stmt = $rfid_conn->prepare($insert_query);
-                $insert_stmt->bindParam(':name', $student_name);
-                $insert_stmt->bindParam(':student_number', $student_id);
-                $insert_stmt->bindParam(':rfid', $rfid_number ?: ''); // Use provided RFID or empty string
-                $insert_stmt->execute();
-                return $rfid_conn->lastInsertId();
+            if ($check_stmt->rowCount() > 0) {
+                return $student_number;
             } else {
-                // Student exists, update RFID if provided
-                if ($rfid_number) {
-                    $update_query = "UPDATE students SET rfid = :rfid WHERE student_number = :student_number";
-                    $update_stmt = $rfid_conn->prepare($update_query);
-                    $update_stmt->bindParam(':rfid', $rfid_number);
-                    $update_stmt->bindParam(':student_number', $student_id);
-                    $update_stmt->execute();
-                }
-                
-                $student_data = $check_stmt->fetch(PDO::FETCH_ASSOC);
-                return $student_data['id'];
+                throw new Exception("Student not found: " . $student_number);
             }
         } catch(Exception $e) {
-            throw new Exception("Failed to sync student data: " . $e->getMessage());
+            throw new Exception("Failed to verify student: " . $e->getMessage());
         }
     }
 }

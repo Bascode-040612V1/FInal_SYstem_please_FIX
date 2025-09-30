@@ -7,13 +7,11 @@
 class Database {
     private $host;
     private $port;
-    private $violation_db_name;
-    private $rfid_db_name;
+    private $db_name;
     private $username;
     private $password;
     
-    private $violation_connection;
-    private $rfid_connection;
+    private $connection;
     
     public function __construct() {
         // Load configuration from environment variables or .env file
@@ -33,8 +31,7 @@ class Database {
         // Get configuration from environment variables (with fallbacks)
         $this->host = $_ENV['DB_HOST'] ?? getenv('DB_HOST') ?: 'localhost';
         $this->port = $_ENV['DB_PORT'] ?? getenv('DB_PORT') ?: '3306';
-        $this->violation_db_name = $_ENV['DB_NAME'] ?? getenv('DB_NAME') ?: 'aics_bicutan_system_db';
-        $this->rfid_db_name = $_ENV['DB_NAME'] ?? getenv('DB_NAME') ?: 'aics_bicutan_system_db';
+        $this->db_name = $_ENV['DB_NAME'] ?? getenv('DB_NAME') ?: 'aics_bicutan_system_db';
         $this->username = $_ENV['DB_USERNAME'] ?? getenv('DB_USERNAME') ?: 'root';
         $this->password = $_ENV['DB_PASSWORD'] ?? getenv('DB_PASSWORD') ?: '';
     }
@@ -72,34 +69,29 @@ class Database {
         }
     }
     
-    public function getViolationConnection() {
+    public function getConnection() {
         try {
-            if ($this->violation_connection == null) {
-                $dsn = "mysql:host=" . $this->host . ";port=" . $this->port . ";dbname=" . $this->violation_db_name;
-                $this->violation_connection = new PDO($dsn, $this->username, $this->password);
-                $this->violation_connection->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-                $this->violation_connection->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+            if ($this->connection == null) {
+                $dsn = "mysql:host=" . $this->host . ";port=" . $this->port . ";dbname=" . $this->db_name;
+                $this->connection = new PDO($dsn, $this->username, $this->password);
+                $this->connection->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                $this->connection->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
             }
-            return $this->violation_connection;
+            return $this->connection;
         } catch(PDOException $exception) {
-            $this->logError("Violation DB Connection Error: " . $exception->getMessage());
+            $this->logError("Database Connection Error: " . $exception->getMessage());
             return null;
         }
     }
     
+    // For backward compatibility, alias getViolationConnection to getConnection
+    public function getViolationConnection() {
+        return $this->getConnection();
+    }
+    
+    // For backward compatibility, alias getRfidConnection to getConnection
     public function getRfidConnection() {
-        try {
-            if ($this->rfid_connection == null) {
-                $dsn = "mysql:host=" . $this->host . ";port=" . $this->port . ";dbname=" . $this->rfid_db_name;
-                $this->rfid_connection = new PDO($dsn, $this->username, $this->password);
-                $this->rfid_connection->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-                $this->rfid_connection->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
-            }
-            return $this->rfid_connection;
-        } catch(PDOException $exception) {
-            $this->logError("RFID DB Connection Error: " . $exception->getMessage());
-            return null;
-        }
+        return $this->getConnection();
     }
     
     private function logError($message) {

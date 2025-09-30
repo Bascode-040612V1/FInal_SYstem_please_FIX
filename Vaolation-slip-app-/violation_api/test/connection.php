@@ -1,10 +1,8 @@
 <?php
-require_once '../config/database.php';
+require_once '../../violation_api/config/database.php';
 
-// Validate request method
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    sendResponse(false, "Only GET method is allowed");
-}
+// For CLI testing, simulate GET request
+$_SERVER['REQUEST_METHOD'] = 'GET';
 
 $database = new Database();
 
@@ -37,10 +35,13 @@ try {
     $results['server_time'] = date('Y-m-d H:i:s');
     $results['php_version'] = phpversion();
     
-    sendResponse(true, "Connection test completed", $results);
+    echo "Test Results:\n";
+    foreach ($results as $key => $value) {
+        echo "$key: $value\n";
+    }
     
 } catch(Exception $e) {
     error_log("Connection test error: " . $e->getMessage());
-    sendResponse(false, "Connection test failed");
+    echo "Error: " . $e->getMessage() . "\n";
 }
 ?>

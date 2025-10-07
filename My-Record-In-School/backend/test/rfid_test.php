@@ -42,12 +42,12 @@ try {
     
     if ($action === 'insert_test_scan') {
         // Clear any existing scans first
-        $clear_query = "DELETE FROM rfid_scans";
+        $clear_query = "DELETE FROM rfid_registration_scans";
         $clear_stmt = $conn->prepare($clear_query);
         $clear_stmt->execute();
         
         // Insert new RFID scan
-        $insert_query = "INSERT INTO rfid_scans (rfid_number, scanned_at) VALUES (:rfid_number, NOW())";
+        $insert_query = "INSERT INTO rfid_registration_scans (rfid_number, user_type, time_scanned) VALUES (:rfid_number, 'student', NOW())";
         $insert_stmt = $conn->prepare($insert_query);
         $insert_stmt->bindParam(':rfid_number', $rfid_number);
         $insert_stmt->execute();

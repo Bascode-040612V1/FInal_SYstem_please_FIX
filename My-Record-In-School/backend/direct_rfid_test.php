@@ -18,17 +18,17 @@ try {
     echo "Database connection successful!\n";
     
     // Check if rfid_scans table exists
-    $table_check = $conn->query("SHOW TABLES LIKE 'rfid_scans'");
+    $table_check = $conn->query("SHOW TABLES LIKE 'rfid_registration_scans'");
     if ($table_check->rowCount() > 0) {
-        echo "rfid_scans table exists!\n";
+        echo "rfid_registration_scans table exists!\n";
         
         // Check data in table
-        $data_check = $conn->query("SELECT COUNT(*) as count FROM rfid_scans");
+        $data_check = $conn->query("SELECT COUNT(*) as count FROM rfid_registration_scans");
         $count = $data_check->fetch(PDO::FETCH_ASSOC)['count'];
-        echo "Records in rfid_scans: $count\n";
+        echo "Records in rfid_registration_scans: $count\n";
         
         // Get latest scan
-        $latest_query = "SELECT * FROM rfid_scans ORDER BY scanned_at DESC LIMIT 1";
+        $latest_query = "SELECT * FROM rfid_registration_scans ORDER BY time_scanned DESC LIMIT 1";
         $stmt = $conn->prepare($latest_query);
         $stmt->execute();
         
@@ -39,7 +39,7 @@ try {
                 "success" => true,
                 "message" => "Latest RFID retrieved successfully",
                 "rfid_number" => $row['rfid_number'],
-                "scanned_at" => $row['scanned_at'],
+                "scanned_at" => $row['time_scanned'],
                 "total_records" => $count,
                 "debug" => "Direct test successful"
             );
@@ -55,7 +55,7 @@ try {
     } else {
         $result = array(
             "success" => false,
-            "message" => "rfid_scans table does not exist",
+            "message" => "rfid_registration_scans table does not exist",
             "debug" => "Table missing"
         );
     }

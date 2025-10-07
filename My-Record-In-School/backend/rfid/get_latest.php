@@ -37,7 +37,7 @@ try {
     header('X-RFID-DB-Connected: true');
     
     // 1. Get the latest RFID scan
-    $sql = "SELECT * FROM rfid_scans ORDER BY scanned_at DESC LIMIT 1";
+    $sql = "SELECT * FROM rfid_registration_scans ORDER BY time_scanned DESC LIMIT 1";
     $stmt = $conn->prepare($sql);
     $stmt->execute();
     
@@ -46,10 +46,10 @@ try {
         $rfid = $row['rfid_number'];
         
         // 2. Delete all older scans (keep only latest one)
-        $cleanup = "DELETE FROM rfid_scans 
-                    WHERE id NOT IN (
+        $cleanup = "DELETE FROM rfid_registration_scans 
+                    WHERE scan_id NOT IN (
                         SELECT * FROM (
-                            SELECT id FROM rfid_scans ORDER BY scanned_at DESC LIMIT 1
+                            SELECT scan_id FROM rfid_registration_scans ORDER BY time_scanned DESC LIMIT 1
                         ) AS temp
                     )";
         $cleanup_stmt = $conn->prepare($cleanup);
@@ -59,7 +59,7 @@ try {
             "success" => true,
             "message" => "Latest RFID retrieved successfully",
             "rfid_number" => $rfid,
-            "scanned_at" => $row['scanned_at'],
+            "scanned_at" => $row['time_scanned'],
             "cleaned_records" => $cleanup_stmt->rowCount()
         ));
     } else {

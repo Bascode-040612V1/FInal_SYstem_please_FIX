@@ -3,8 +3,8 @@
 define('DB_HOST', 'localhost');
 define('DB_USER', 'root');
 define('DB_PASS', '');
-define('DB_NAME', 'rfid_system');
-define('DB_VIOLATION', 'student_violation_db');
+define('DB_NAME', 'aics_bicutan_system_db');
+define('DB_VIOLATION', 'aics_bicutan_system_db'); // Updated to use unified database from DBMODIFY.sql
 
 // Create database connection using mysqli
 function getDatabaseConnection($database = DB_NAME) {

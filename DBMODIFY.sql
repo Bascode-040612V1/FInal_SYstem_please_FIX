@@ -2,13 +2,13 @@
 -- This file contains the corrected and complete database structure for the AICS School Management System
 -- Run this to create a fully functional database that supports all three system components
 
--- CREATE DATABASE (Changed to match config files)
-CREATE DATABASE IF NOT EXISTS `rfid_system` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE `rfid_system`;
+-- CREATE DATABASE (Using existing database name)
+CREATE DATABASE IF NOT EXISTS `aics_bicutan_system_db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE `aics_bicutan_system_db`;
 
 -- ADMINS TABLE (Enhanced with proper RFID support)
 CREATE TABLE IF NOT EXISTS admins (
-  rfid INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  rfid BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   role ENUM('Admin','Teacher') NOT NULL DEFAULT 'Admin',
   name VARCHAR(200) NOT NULL,
   email VARCHAR(255) NOT NULL UNIQUE,
@@ -26,10 +26,9 @@ CREATE TABLE IF NOT EXISTS guards (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- STUDENTS TABLE (Enhanced for dual compatibility)
+-- STUDENTS TABLE (Enhanced for unified system)
 CREATE TABLE IF NOT EXISTS students (
   student_number INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  id INT UNIQUE NOT NULL, -- Add compatibility field for mobile apps
   surname VARCHAR(120) NOT NULL,
   firstname VARCHAR(120) NOT NULL,
   lastname VARCHAR(120),
@@ -37,12 +36,11 @@ CREATE TABLE IF NOT EXISTS students (
   course VARCHAR(100),
   yearlevel VARCHAR(50),
   section VARCHAR(80),
-  rfid VARCHAR(100) UNIQUE, -- RFID card number
+  rfid BIGINT UNSIGNED UNIQUE, -- RFID card number
   password VARCHAR(255),
   image VARCHAR(512) DEFAULT 'assets/default-profile.png', -- Default profile image
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NULL ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_student_id (id),
   INDEX idx_rfid (rfid),
   INDEX idx_name (surname, firstname)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -51,7 +49,7 @@ CREATE TABLE IF NOT EXISTS students (
 CREATE TABLE IF NOT EXISTS rfid_registration_scans (
   scan_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   user_type ENUM('admin','student') NOT NULL,
-  rfid VARCHAR(100) NOT NULL,
+  rfid BIGINT UNSIGNED NOT NULL,
   time_scanned TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX (rfid),
   INDEX (user_type)
@@ -60,7 +58,7 @@ CREATE TABLE IF NOT EXISTS rfid_registration_scans (
 -- RFID ADMIN SCANS (MISSING TABLE - For admin RFID management)
 CREATE TABLE IF NOT EXISTS rfid_admin_scans (
   id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  rfid_number VARCHAR(50) NOT NULL,
+  rfid_number BIGINT UNSIGNED NOT NULL,
   admin_username VARCHAR(50),
   admin_role VARCHAR(20) DEFAULT 'admin',
   scanned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -69,11 +67,9 @@ CREATE TABLE IF NOT EXISTS rfid_admin_scans (
   INDEX idx_username (admin_username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ATTENDANCE TABLE (Enhanced for dual compatibility)
+-- ATTENDANCE TABLE (Enhanced for unified system)
 CREATE TABLE IF NOT EXISTS attendance (
   attendance_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  id INT UNIQUE, -- Add compatibility field for mobile apps
-  student_id INT, -- Add compatibility field for mobile apps  
   student_number INT NOT NULL,
   time_in DATETIME,
   time_out DATETIME,
@@ -82,27 +78,26 @@ CREATE TABLE IF NOT EXISTS attendance (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (student_number) REFERENCES students(student_number) ON DELETE CASCADE,
   UNIQUE KEY student_date_unique (student_number, date),
-  INDEX idx_student_id (student_id),
   INDEX idx_date (date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- SAVED ATTENDANCE TABLE (CRITICAL MISSING TABLE)
+-- SAVED ATTENDANCE TABLE (CRITICAL TABLE)
 -- This table stores archived daily attendance records
 CREATE TABLE IF NOT EXISTS saved_attendance (
   id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  student_id INT NOT NULL, -- References students.id
+  student_number INT NOT NULL, -- References students.student_number
   name VARCHAR(255) NOT NULL, -- Student full name (denormalized for performance)
-  student_number VARCHAR(50) NOT NULL, -- Student number (denormalized)
+  student_number_display VARCHAR(50) NOT NULL, -- Student number (denormalized)
   image VARCHAR(512), -- Student profile image path
   saved_time_in DATETIME, -- Time student entered
   saved_time_out DATETIME, -- Time student left
   saved_date DATE NOT NULL, -- Date of attendance
   status ENUM('Present','Absent','Late') DEFAULT 'Present',
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_student_date (student_id, saved_date),
+  INDEX idx_student_date (student_number, saved_date),
   INDEX idx_saved_date (saved_date),
-  INDEX idx_student_number (student_number),
-  INDEX idx_student_id (student_id)
+  INDEX idx_student_number_display (student_number_display),
+  INDEX idx_student_number (student_number)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- VIOLATION TYPES TABLE (Master list of all possible violations)
@@ -144,7 +139,7 @@ CREATE TABLE IF NOT EXISTS student_offense_counts (
   INDEX idx_student_violation (studentnumber, violation_type_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- VIOLATIONS TABLE (Modern violation records - Web system)
+-- VIOLATIONS TABLE (Unified violation records)
 CREATE TABLE IF NOT EXISTS violations (
   violation_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   student_number INT NOT NULL,
@@ -162,26 +157,6 @@ CREATE TABLE IF NOT EXISTS violations (
   INDEX idx_student_number (student_number),
   INDEX idx_violation_type (violation_type_id),
   INDEX idx_date (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- VIOLATIONS LEGACY TABLE (For mobile app compatibility)
-CREATE TABLE IF NOT EXISTS violations_legacy (
-  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  student_id VARCHAR(50) NOT NULL, -- Student identifier (mobile apps expect string)
-  violation_type VARCHAR(255) NOT NULL, -- Violation type name
-  violation_description TEXT,
-  offense_count TINYINT NOT NULL DEFAULT 1,
-  penalty TEXT,
-  recorded_by VARCHAR(255) NOT NULL, -- Staff member name
-  date_recorded TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  acknowledged TINYINT(1) NOT NULL DEFAULT 0,
-  acknowledged_at TIMESTAMP NULL,
-  category VARCHAR(100), -- Violation category
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_student_id (student_id),
-  INDEX idx_violation_type (violation_type),
-  INDEX idx_date_recorded (date_recorded),
-  INDEX idx_category (category)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ================================================================
@@ -313,13 +288,11 @@ CREATE INDEX idx_attendance_date ON attendance (date);
 
 -- Saved attendance indexes
 CREATE INDEX idx_saved_attendance_date ON saved_attendance (saved_date);
-CREATE INDEX idx_saved_attendance_student ON saved_attendance (student_id, saved_date);
+CREATE INDEX idx_saved_attendance_student ON saved_attendance (student_number, saved_date);
 
 -- Violations indexes
 CREATE INDEX idx_violations_student ON violations (student_number);
 CREATE INDEX idx_violations_date ON violations (created_at);
-CREATE INDEX idx_violations_legacy_student ON violations_legacy (student_id);
-CREATE INDEX idx_violations_legacy_date ON violations_legacy (date_recorded);
 
 -- ================================================================
 -- SAMPLE DATA (COMMENTED OUT FOR SECURITY)
@@ -336,20 +309,20 @@ INSERT INTO guards (name, email, password) VALUES
 ('Security Guard 1', 'guard1@school.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'),
 ('Security Guard 2', 'guard2@school.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi');
 
--- Sample students (id field will be auto-generated to match student_number)
-INSERT INTO students (student_number, id, surname, firstname, lastname, course, yearlevel, section, rfid, password) VALUES
-(2023001, 2023001, 'Dela Cruz', 'Juan', 'Santos', 'BSCS', '1st Year', 'CS-1A', 'RFID12345', '2023001'),
-(2023002, 2023002, 'Santos', 'Maria', 'Garcia', 'BSIT', '2nd Year', 'IT-2B', 'RFID12346', '2023002'),
-(2023003, 2023003, 'Garcia', 'Pedro', 'Rodriguez', 'BSCS', '1st Year', 'CS-1B', 'RFID12347', '2023003');
+-- Sample students
+INSERT INTO students (student_number, surname, firstname, lastname, course, yearlevel, section, rfid, password) VALUES
+(2023001, 'Dela Cruz', 'Juan', 'Santos', 'BSCS', '1st Year', 'CS-1A', 'RFID12345', '2023001'),
+(2023002, 'Santos', 'Maria', 'Garcia', 'BSIT', '2nd Year', 'IT-2B', 'RFID12346', '2023002'),
+(2023003, 'Garcia', 'Pedro', 'Rodriguez', 'BSCS', '1st Year', 'CS-1B', 'RFID12347', '2023003');
 
 -- Sample attendance records
-INSERT INTO attendance (student_id, student_number, time_in, time_out, date, status) VALUES
-(2023001, 2023001, '2024-01-15 08:00:00', '2024-01-15 17:00:00', '2024-01-15', 'Present'),
-(2023002, 2023002, '2024-01-15 08:15:00', '2024-01-15 17:15:00', '2024-01-15', 'Present'),
-(2023003, 2023003, '2024-01-15 08:30:00', NULL, '2024-01-15', 'Present');
+INSERT INTO attendance (student_number, time_in, time_out, date, status) VALUES
+(2023001, '2024-01-15 08:00:00', '2024-01-15 17:00:00', '2024-01-15', 'Present'),
+(2023002, '2024-01-15 08:15:00', '2024-01-15 17:15:00', '2024-01-15', 'Present'),
+(2023003, '2024-01-15 08:30:00', NULL, '2024-01-15', 'Present');
 
 -- Sample saved attendance (archived records)
-INSERT INTO saved_attendance (student_id, name, student_number, saved_time_in, saved_time_out, saved_date, status) VALUES
+INSERT INTO saved_attendance (student_number, name, student_number_display, saved_time_in, saved_time_out, saved_date, status) VALUES
 (2023001, 'Juan Santos Dela Cruz', '2023001', '2024-01-14 08:00:00', '2024-01-14 17:00:00', '2024-01-14', 'Present'),
 (2023002, 'Maria Garcia Santos', '2023002', '2024-01-14 08:15:00', '2024-01-14 17:15:00', '2024-01-14', 'Present'),
 (2023003, 'Pedro Rodriguez Garcia', '2023003', '2024-01-14 09:00:00', '2024-01-14 17:00:00', '2024-01-14', 'Late');
@@ -362,17 +335,17 @@ INSERT INTO saved_attendance (student_id, name, student_number, saved_time_in, s
 -- USAGE INSTRUCTIONS:
 -- 1. Backup your existing database first
 -- 2. Run this script to create the complete database structure
--- 3. Update your config files to use database name 'rfid_system'
+-- 3. Update your config files to use database name 'aics_bicutan_system_db'
 -- 4. Test all three system components (Dashboard, Student App, Violation App)
 -- 5. Uncomment and modify sample data section if needed for testing
 
 -- FEATURES ADDED:
--- ✅ Fixed database name to match config files (rfid_system)
+-- ✅ Fixed database name to match existing structure (aics_bicutan_system_db)
 -- ✅ Added missing saved_attendance table (CRITICAL)
 -- ✅ Added missing rfid_admin_scans table
--- ✅ Enhanced students table with compatibility fields
--- ✅ Enhanced attendance table with compatibility fields  
--- ✅ Added violations_legacy table for mobile app compatibility
+-- ✅ Enhanced students table with unified student_number approach
+-- ✅ Enhanced attendance table with unified student_number approach  
+-- ✅ Unified violations table using student_number consistently
 -- ✅ Complete violation types and penalty matrix
 -- ✅ Automatic triggers for offense count management
 -- ✅ All necessary indexes for performance

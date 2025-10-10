@@ -31,8 +31,8 @@ if (!$conn) {
 try {
     $conn->beginTransaction();
     
-    // Get student info first
-    $studentQuery = "SELECT CONCAT_WS(' ', surname, firstname, IFNULL(lastname, '')) as student_name, yearlevel as year_level, course, section FROM students WHERE student_number = ?";
+    // Get student info first - FIXED to match DBMODIFY.sql schema (lastname, firstname, middlename)
+    $studentQuery = "SELECT CONCAT_WS(' ', firstname, IFNULL(CONCAT(middlename, ' '), ''), lastname) as student_name, yearlevel as year_level, course, section FROM students WHERE student_number = ?";
     $studentStmt = $conn->prepare($studentQuery);
     $studentStmt->execute([$student_id]);
     $student = $studentStmt->fetch(PDO::FETCH_ASSOC);
@@ -91,7 +91,7 @@ try {
         $getViolationStmt->execute([$violation_id]);
         $inserted_violation = $getViolationStmt->fetch(PDO::FETCH_ASSOC);
         
-        if ($inserted_violation['offense_count'] > $highest_offense) {
+        if ($inserted_violation && $inserted_violation['offense_count'] > $highest_offense) {
             $highest_offense = $inserted_violation['offense_count'];
             $penalty = $inserted_violation['penalty'] ?: "Warning";
         }

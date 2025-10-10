@@ -53,7 +53,7 @@ try {
         // Delta sync - only get records modified since timestamp
         $since_date = date('Y-m-d H:i:s', $since_timestamp / 1000);
         $query = "SELECT v.violation_id as id, v.student_number as student_id, 
-                         CONCAT(s.surname, ', ', s.firstname, ' ', COALESCE(s.lastname, '')) as student_name,
+                         CONCAT(s.lastname, ', ', s.firstname, ' ', COALESCE(s.middlename, '')) as student_name,
                          s.yearlevel as year_level, s.course, s.section,
                          v.offense_count, v.penalty, 
                          CASE 
@@ -82,7 +82,7 @@ try {
     } else {
         // Full sync with optional limit
         $query = "SELECT v.violation_id as id, v.student_number as student_id, 
-                         CONCAT(s.surname, ', ', s.firstname, ' ', COALESCE(s.lastname, '')) as student_name,
+                         CONCAT(s.lastname, ', ', s.firstname, ' ', COALESCE(s.middlename, '')) as student_name,
                          s.yearlevel as year_level, s.course, s.section,
                          v.offense_count, v.penalty, 
                          CASE 
@@ -96,7 +96,7 @@ try {
                          vt.category,
                          COALESCE((SELECT MAX(soc.offense_count) 
                                   FROM student_offense_counts soc 
-                                  WHERE soc.studentnumber = v.student_number AND soc.violation_type_id = v.violation_type_id), v.offense_count) as highest_offense_count
+                                  WHERE soc.student_number = v.student_number AND soc.violation_type_id = v.violation_type_id), v.offense_count) as highest_offense_count
                   FROM violations v 
                   LEFT JOIN students s ON v.student_number = s.student_number
                   LEFT JOIN violation_types vt ON v.violation_type_id = vt.id

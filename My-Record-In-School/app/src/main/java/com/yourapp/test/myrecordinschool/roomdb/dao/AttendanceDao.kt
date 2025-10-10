@@ -70,4 +70,26 @@ interface AttendanceDao {
     // Monthly pagination
     @Query("SELECT * FROM attendance WHERE student_id = :studentId AND date LIKE :yearMonth || '%' ORDER BY date DESC LIMIT :limit OFFSET :offset")
     suspend fun getMonthlyAttendancePaginated(studentId: String, yearMonth: String, limit: Int, offset: Int): List<AttendanceEntity>
+    
+    // Additional offline-specific queries for sync management
+    @Query("SELECT * FROM attendance WHERE student_id = :studentId AND is_synced = 0")
+    suspend fun getUnsyncedAttendance(studentId: String): List<AttendanceEntity>
+    
+    @Query("UPDATE attendance SET is_synced = :synced, local_changes = :hasChanges WHERE id = :attendanceId")
+    suspend fun updateSyncStatus(attendanceId: Int, synced: Boolean, hasChanges: Boolean)
+    
+    @Query("SELECT COUNT(*) FROM attendance WHERE student_id = :studentId AND local_changes = 1")
+    suspend fun getPendingChangesCount(studentId: String): Int
+    
+    @Query("UPDATE attendance SET last_sync_timestamp = :timestamp WHERE student_id = :studentId AND is_synced = 1")
+    suspend fun updateLastSyncTime(studentId: String, timestamp: Long)
+    
+    @Query("UPDATE attendance SET is_synced = 1, local_changes = 0 WHERE student_id = :studentId")
+    suspend fun markAllAsSynced(studentId: String)
+    
+    @Query("SELECT * FROM attendance WHERE student_id = :studentId AND offline_created = 1")
+    suspend fun getOfflineCreatedAttendance(studentId: String): List<AttendanceEntity>
+    
+    @Query("SELECT COUNT(*) FROM attendance WHERE student_id = :studentId AND status = :status AND date LIKE :yearMonth || '%'")
+    suspend fun getStatusCountByMonth(studentId: String, status: String, yearMonth: String): Int
 }

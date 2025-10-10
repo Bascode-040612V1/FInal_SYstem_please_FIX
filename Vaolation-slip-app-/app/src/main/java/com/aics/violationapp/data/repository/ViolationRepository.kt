@@ -31,9 +31,9 @@ class ViolationRepository(
         }
     }
     
-    suspend fun register(username: String, email: String, password: String, rfid: String? = null): Result<User> = withContext(Dispatchers.IO) {
+    suspend fun register(username: String, email: String, password: String, role: String, rfid: String? = null): Result<User> = withContext(Dispatchers.IO) {
         try {
-            val response = apiService.register(RegisterRequest(username, email, password, "guard", rfid))
+            val response = apiService.register(RegisterRequest(username, email, password, role, rfid))
             if (response.isSuccessful && response.body()?.success == true) {
                 response.body()?.data?.let { user ->
                     Result.success(user)

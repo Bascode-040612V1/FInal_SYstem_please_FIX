@@ -8,8 +8,8 @@ USE `aics_bicutan_system_db`;
 
 -- ADMINS TABLE (Enhanced with proper RFID support)
 CREATE TABLE IF NOT EXISTS admins (
-  rfid INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  role ENUM('Admin','Teacher') NOT NULL DEFAULT 'Admin',
+  rfid BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  role ENUM('Guidance Admin','Guard') NOT NULL DEFAULT 'Guard',
   name VARCHAR(200) NOT NULL,
   email VARCHAR(255) NOT NULL UNIQUE,
   password VARCHAR(255) NOT NULL,
@@ -29,43 +29,52 @@ CREATE TABLE IF NOT EXISTS guards (
 -- STUDENTS TABLE (Enhanced for unified system)
 CREATE TABLE IF NOT EXISTS students (
   student_number INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  surname VARCHAR(120) NOT NULL,
+  lastname VARCHAR(120) NOT NULL,
   firstname VARCHAR(120) NOT NULL,
-  lastname VARCHAR(120),
-  name VARCHAR(255) GENERATED ALWAYS AS (CONCAT(firstname, ' ', IFNULL(CONCAT(lastname, ' '), ''), surname)) STORED, -- Computed full name
+  middlename VARCHAR(120),
+  name VARCHAR(255) GENERATED ALWAYS AS (CONCAT(firstname, ' ', IFNULL(CONCAT(middlename, ' '), ''), lastname)) STORED, -- Computed full name
   course VARCHAR(100),
   yearlevel VARCHAR(50),
   section VARCHAR(80),
-  rfid VARCHAR(100) UNIQUE, -- RFID card number
+  rfid BIGINT UNSIGNED UNIQUE, -- RFID card number
   password VARCHAR(255),
   image VARCHAR(512) DEFAULT 'assets/default-profile.png', -- Default profile image
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NULL ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_rfid (rfid),
-  INDEX idx_name (surname, firstname)
+  INDEX idx_name (lastname, firstname)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- RFID REGISTRATION SCANS (For student/admin RFID registration)
+
+
+-- RFID REGISTRATION SCANS (For STUDENT RFID registration - My-Record-In-School app only)
 CREATE TABLE IF NOT EXISTS rfid_registration_scans (
   scan_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  user_type ENUM('admin','student') NOT NULL,
-  rfid VARCHAR(100) NOT NULL,
+  rfid_number BIGINT UNSIGNED NOT NULL,
+  user_type ENUM('student') NOT NULL DEFAULT 'student',
   time_scanned TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  INDEX (rfid),
-  INDEX (user_type)
+  is_used TINYINT(1) DEFAULT 0, -- Track if RFID has been used for registration
+  INDEX (rfid_number),
+  INDEX (time_scanned),
+  INDEX (is_used)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- RFID ADMIN SCANS (MISSING TABLE - For admin RFID management)
+-- RFID ADMIN SCANS (For ADMIN/GUARD RFID registration - Violation Slip app only)
 CREATE TABLE IF NOT EXISTS rfid_admin_scans (
   id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  rfid_number VARCHAR(50) NOT NULL,
+  rfid_number BIGINT UNSIGNED NOT NULL,
+  user_type ENUM('admin','guard') NOT NULL DEFAULT 'admin', -- Changed to match role types
   admin_username VARCHAR(50),
-  admin_role VARCHAR(20) DEFAULT 'admin',
+  admin_role ENUM('Guidance Admin','Guard') DEFAULT 'Guard', -- Standardized roles
   scanned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   is_registered TINYINT(1) DEFAULT 0,
   INDEX idx_rfid (rfid_number),
-  INDEX idx_username (admin_username)
+  INDEX idx_username (admin_username),
+  INDEX idx_time (scanned_at),
+  INDEX idx_registered (is_registered)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
 
 -- ATTENDANCE TABLE (Enhanced for unified system)
 CREATE TABLE IF NOT EXISTS attendance (
@@ -129,14 +138,14 @@ CREATE TABLE IF NOT EXISTS penalty_matrix (
 -- STUDENT OFFENSE COUNTS TABLE (Tracks offense count per student per violation type)
 CREATE TABLE IF NOT EXISTS student_offense_counts (
   id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  studentnumber INT NOT NULL,
+  student_number INT NOT NULL,
   violation_type_id INT NOT NULL,
   offense_count TINYINT NOT NULL DEFAULT 0,
   last_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (studentnumber) REFERENCES students(student_number) ON DELETE CASCADE,
+  FOREIGN KEY (student_number) REFERENCES students(student_number) ON DELETE CASCADE,
   FOREIGN KEY (violation_type_id) REFERENCES violation_types(id) ON DELETE CASCADE,
-  UNIQUE KEY student_violation_unique (studentnumber, violation_type_id),
-  INDEX idx_student_violation (studentnumber, violation_type_id)
+  UNIQUE KEY student_violation_unique (student_number, violation_type_id),
+  INDEX idx_student_violation (student_number, violation_type_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- VIOLATIONS TABLE (Unified violation records)
@@ -219,6 +228,23 @@ ON DUPLICATE KEY UPDATE penalty_description = VALUES(penalty_description);
 
 DELIMITER $$
 
+-- ... existing code ...
+
+-- STUDENT OFFENSE COUNTS TABLE (Tracks offense count per student per violation type)
+CREATE TABLE IF NOT EXISTS student_offense_counts (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  student_number INT NOT NULL,
+  violation_type_id INT NOT NULL,
+  offense_count TINYINT NOT NULL DEFAULT 0,
+  last_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (student_number) REFERENCES students(student_number) ON DELETE CASCADE,
+  FOREIGN KEY (violation_type_id) REFERENCES violation_types(id) ON DELETE CASCADE,
+  UNIQUE KEY student_violation_unique (student_number, violation_type_id),
+  INDEX idx_student_violation (student_number, violation_type_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ... existing code ...
+
 -- Trigger to calculate offense count before inserting violation
 CREATE TRIGGER trg_violations_before_insert
 BEFORE INSERT ON violations
@@ -229,7 +255,7 @@ BEGIN
   -- Get current offense count for this student & violation type
   SELECT offense_count INTO current_count
     FROM student_offense_counts
-    WHERE studentnumber = NEW.student_number
+    WHERE student_number = NEW.student_number
       AND violation_type_id = NEW.violation_type_id
     LIMIT 1;
 
@@ -264,12 +290,14 @@ AFTER INSERT ON violations
 FOR EACH ROW
 BEGIN
   -- Update/insert student offense count
-  INSERT INTO student_offense_counts (studentnumber, violation_type_id, offense_count, last_updated)
+  INSERT INTO student_offense_counts (student_number, violation_type_id, offense_count, last_updated)
   VALUES (NEW.student_number, NEW.violation_type_id, NEW.offense_count, NOW())
   ON DUPLICATE KEY UPDATE 
     offense_count = VALUES(offense_count), 
     last_updated = NOW();
 END$$
+
+-- ... existing code ...
 
 DELIMITER ;
 
@@ -280,8 +308,7 @@ DELIMITER ;
 -- Students table indexes
 CREATE INDEX idx_students_rfid ON students (rfid);
 CREATE INDEX idx_students_student_number ON students (student_number);
-CREATE INDEX idx_students_name ON students (surname, firstname);
-
+CREATE INDEX idx_students_name ON students (lastname, firstname);
 -- Attendance table indexes  
 CREATE INDEX idx_attendance_student_date ON attendance (student_number, date);
 CREATE INDEX idx_attendance_date ON attendance (date);
@@ -310,7 +337,7 @@ INSERT INTO guards (name, email, password) VALUES
 ('Security Guard 2', 'guard2@school.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi');
 
 -- Sample students
-INSERT INTO students (student_number, surname, firstname, lastname, course, yearlevel, section, rfid, password) VALUES
+INSERT INTO students (student_number, lastname, firstname, middlename, course, yearlevel, section, rfid, password) VALUES
 (2023001, 'Dela Cruz', 'Juan', 'Santos', 'BSCS', '1st Year', 'CS-1A', 'RFID12345', '2023001'),
 (2023002, 'Santos', 'Maria', 'Garcia', 'BSIT', '2nd Year', 'IT-2B', 'RFID12346', '2023002'),
 (2023003, 'Garcia', 'Pedro', 'Rodriguez', 'BSCS', '1st Year', 'CS-1B', 'RFID12347', '2023003');

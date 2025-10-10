@@ -14,5 +14,10 @@ data class AttendanceEntity(
     val time_out: String?,
     val status: String,
     val attendance_type: String,
-    val created_at: String
+    val created_at: String,
+    // Offline support fields for sync tracking
+    val last_sync_timestamp: Long = System.currentTimeMillis(),
+    val is_synced: Boolean = true,
+    val local_changes: Boolean = false,
+    val offline_created: Boolean = false
 )

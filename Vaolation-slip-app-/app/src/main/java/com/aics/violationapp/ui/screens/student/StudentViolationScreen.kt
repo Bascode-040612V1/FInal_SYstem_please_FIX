@@ -1,5 +1,6 @@
 package com.aics.violationapp.ui.screens.student
 
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -29,6 +30,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.aics.violationapp.data.network.NetworkModule
 import com.aics.violationapp.data.repository.ViolationRepository
+import com.aics.violationapp.navigation.Screen
 import com.aics.violationapp.ui.theme.*
 import com.aics.violationapp.ui.viewmodel.StudentViolationViewModel
 import com.aics.violationapp.utils.PreferencesManager
@@ -54,6 +56,25 @@ fun StudentViolationScreen(
     LaunchedEffect(studentId) {
         viewModel.loadStudent(studentId)
     }
+    
+ 
+    
+    // Auto-navigate to home screen after successful submission
+    LaunchedEffect(uiState.showSuccessMessage) {
+        if (uiState.showSuccessMessage && uiState.submitResult != null) {
+            // Delay to show success message briefly, then navigate to home
+            kotlinx.coroutines.delay(2000) // 2 second delay
+            navController.navigate(Screen.Home.route) {
+                popUpTo(Screen.Home.route) {
+                    inclusive = true
+                }
+            }
+        }
+    }
+
+ 
+
+   
     
     Box(
         modifier = Modifier

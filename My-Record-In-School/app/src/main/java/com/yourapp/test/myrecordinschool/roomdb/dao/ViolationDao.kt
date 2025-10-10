@@ -74,4 +74,30 @@ interface ViolationDao {
     // Data cleanup for optimization
     @Query("DELETE FROM violations WHERE student_id = :studentId AND date_recorded < :cutoffTimestamp")
     suspend fun deleteOldViolations(studentId: String, cutoffTimestamp: Long)
+    
+    // Additional offline-specific queries for better sync management
+    @Query("SELECT * FROM violations WHERE student_id = :studentId AND is_synced = 0")
+    suspend fun getUnsyncedViolations(studentId: String): List<ViolationEntity>
+    
+    @Query("UPDATE violations SET is_synced = :synced, local_changes = :hasChanges WHERE id = :violationId")
+    suspend fun updateSyncStatus(violationId: Int, synced: Boolean, hasChanges: Boolean)
+    
+    @Query("SELECT COUNT(*) FROM violations WHERE student_id = :studentId AND acknowledged = 0")
+    suspend fun getUnacknowledgedCount(studentId: String): Int
+    
+    @Query("SELECT * FROM violations WHERE student_id = :studentId AND date_recorded >= :fromDate ORDER BY date_recorded DESC")
+    suspend fun getViolationsFromDate(studentId: String, fromDate: String): List<ViolationEntity>
+    
+    @Query("SELECT COUNT(*) FROM violations WHERE student_id = :studentId AND local_changes = 1")
+    suspend fun getPendingChangesCount(studentId: String): Int
+    
+    @Query("UPDATE violations SET last_sync_timestamp = :timestamp WHERE student_id = :studentId AND is_synced = 1")
+    suspend fun updateLastSyncTime(studentId: String, timestamp: Long)
+    
+    // Bulk operations for efficient offline sync
+    @Query("UPDATE violations SET is_synced = 1, local_changes = 0 WHERE student_id = :studentId")
+    suspend fun markAllAsSynced(studentId: String)
+    
+    @Query("SELECT * FROM violations WHERE student_id = :studentId AND category = :category ORDER BY date_recorded DESC")
+    suspend fun getViolationsByCategory(studentId: String, category: String): List<ViolationEntity>
 }

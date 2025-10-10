@@ -20,11 +20,11 @@ if (!$conn) {
 }
 
 try {
-    // Get student violations with violation type names
+    // Get student violations with violation type names - FIXED to match DBMODIFY.sql schema (lastname, firstname, middlename)
     $query = "SELECT 
         v.violation_id as id,
         v.student_number as student_id,
-        CONCAT_WS(' ', s.surname, s.firstname, IFNULL(s.lastname, '')) as student_name,
+        CONCAT_WS(' ', s.firstname, IFNULL(CONCAT(s.middlename, ' '), ''), s.lastname) as student_name,
         s.yearlevel as year_level,
         s.course,
         s.section,

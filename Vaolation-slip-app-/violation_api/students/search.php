@@ -20,10 +20,10 @@ if (!$conn) {
 }
 
 try {
-    // Search student in database
+    // Search student in database - FIXED to match DBMODIFY.sql schema (lastname, firstname, middlename)
     $query = "SELECT 
         student_number as student_id, 
-        CONCAT_WS(' ', surname, firstname, IFNULL(lastname, '')) as student_name, 
+        CONCAT_WS(' ', firstname, IFNULL(CONCAT(middlename, ' '), ''), lastname) as student_name, 
         yearlevel as year_level, 
         course, 
         section, 
@@ -43,7 +43,7 @@ try {
             soc.offense_count 
         FROM student_offense_counts soc 
         JOIN violation_types vt ON soc.violation_type_id = vt.id 
-        WHERE soc.studentnumber = ?";
+        WHERE soc.student_number = ?";
         $offenseStmt = $conn->prepare($offenseQuery);
         $offenseStmt->execute([$student_id]);
         

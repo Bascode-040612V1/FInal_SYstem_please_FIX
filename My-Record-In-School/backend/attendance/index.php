@@ -50,8 +50,8 @@ try {
     $since_timestamp = isset($_GET['since']) ? intval($_GET['since']) : 0;
     $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 0;
     
-    // Get student from the combined database
-    $student_query = "SELECT student_number, CONCAT(surname, ', ', firstname, ' ', COALESCE(lastname, '')) as name 
+     // Get student from the combined database
+    $student_query = "SELECT student_number, CONCAT(lastname, ', ', firstname, ' ', COALESCE(middlename, '')) as name 
                       FROM students WHERE student_number = :student_number LIMIT 1";
     $student_stmt = $conn->prepare($student_query);
     $student_stmt->bindParam(':student_number', $student_number);
@@ -70,7 +70,7 @@ try {
         // Delta sync - only get records since timestamp
         $since_date = date('Y-m-d', $since_timestamp / 1000);
         $query = "SELECT a.attendance_id as id, a.student_number, a.time_in, a.time_out, a.date, 
-                         s.surname, s.firstname, s.lastname,
+                         s.lastname, s.firstname, s.middlename,
                          'regular' as attendance_type
                   FROM attendance a 
                   JOIN students s ON a.student_number = s.student_number 
@@ -79,7 +79,7 @@ try {
     } else {
         // Full sync with optional date filters
         $query = "SELECT a.attendance_id as id, a.student_number, a.time_in, a.time_out, a.date, 
-                         s.surname, s.firstname, s.lastname,
+                         s.lastname, s.firstname, s.middlename,
                          'regular' as attendance_type
                   FROM attendance a 
                   JOIN students s ON a.student_number = s.student_number 
@@ -115,10 +115,12 @@ try {
     }
     $stmt->execute();
     
+
     $attendance = array();
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         // Construct full name
-        $full_name = trim(($row['surname'] ?? '') . ', ' . ($row['firstname'] ?? '') . ' ' . ($row['lastname'] ?? ''));
+        $full_name = trim(($row['lastname'] ?? '') . ', ' . ($row['firstname'] ?? '') . ' ' . ($row['middlename'] ?? ''));
+        
         
         // Determine status based on time_in
         $status = "ABSENT";

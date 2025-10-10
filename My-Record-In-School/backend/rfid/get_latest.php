@@ -43,7 +43,7 @@ try {
     
     if ($stmt->rowCount() > 0) {
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        $rfid = $row['rfid_number'];
+        $rfid = $row['rfid_number']; // This field name matches DBMODIFY.sql
         
         // 2. Delete all older scans (keep only latest one)
         $cleanup = "DELETE FROM rfid_registration_scans 
@@ -62,6 +62,7 @@ try {
             "scanned_at" => $row['time_scanned'],
             "cleaned_records" => $cleanup_stmt->rowCount()
         ));
+
     } else {
         echo json_encode(array(
             "success" => false,

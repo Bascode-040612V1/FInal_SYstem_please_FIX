@@ -17,7 +17,8 @@ data class AuthUiState(
     val error: String? = null,
     val isLoginMode: Boolean = true,
     val rfidNumber: String? = null,
-    val isRfidLoading: Boolean = false
+    val isRfidLoading: Boolean = false,
+    val selectedRole: String = "Guard" // New role field
 )
 
 class AuthViewModel(
@@ -47,6 +48,14 @@ class AuthViewModel(
         )
     }
     
+    fun setRole(role: String) {
+        _uiState.value = _uiState.value.copy(
+            selectedRole = role,
+            // Clear RFID if switching to Guard
+            rfidNumber = if (role == "Guard") null else _uiState.value.rfidNumber
+        )
+    }
+    
     fun login(email: String, password: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
@@ -70,11 +79,11 @@ class AuthViewModel(
         }
     }
     
-    fun register(username: String, email: String, password: String, rfid: String? = null) {
+    fun register(username: String, email: String, password: String, role: String, rfid: String? = null) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
-            repository.register(username, email, password, rfid)
+            repository.register(username, email, password, role, rfid)
                 .onSuccess { user ->
                     preferencesManager.saveUser(user)
                     _uiState.value = _uiState.value.copy(
@@ -94,23 +103,26 @@ class AuthViewModel(
     }
     
     fun refreshRfidNumber() {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isRfidLoading = true)
-            
-            repository.getRfidNumber()
-                .onSuccess { rfidNumber ->
-                    _uiState.value = _uiState.value.copy(
-                        isRfidLoading = false,
-                        rfidNumber = rfidNumber,
-                        error = null
-                    )
-                }
-                .onFailure { exception ->
-                    _uiState.value = _uiState.value.copy(
-                        isRfidLoading = false,
-                        error = exception.message
-                    )
-                }
+        // Only allow RFID refresh for Guidance Admin
+        if (_uiState.value.selectedRole == "Guidance Admin") {
+            viewModelScope.launch {
+                _uiState.value = _uiState.value.copy(isRfidLoading = true)
+                
+                repository.getRfidNumber()
+                    .onSuccess { rfidNumber ->
+                        _uiState.value = _uiState.value.copy(
+                            isRfidLoading = false,
+                            rfidNumber = rfidNumber,
+                            error = null
+                        )
+                    }
+                    .onFailure { exception ->
+                        _uiState.value = _uiState.value.copy(
+                            isRfidLoading = false,
+                            error = exception.message
+                        )
+                    }
+            }
         }
     }
     

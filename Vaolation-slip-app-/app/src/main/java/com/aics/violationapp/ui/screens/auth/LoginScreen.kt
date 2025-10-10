@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -68,6 +69,7 @@ fun LoginScreen(
     var confirmPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
+    var roleDropdownExpanded by remember { mutableStateOf(false) }
     
     // Navigation effect
     LaunchedEffect(uiState.isLoggedIn) {
@@ -167,7 +169,6 @@ fun LoginScreen(
                 }
             }
 
-
             // Form Card
             Card(
                 modifier = Modifier
@@ -181,6 +182,51 @@ fun LoginScreen(
                         .padding(24.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    // Role Dropdown (only for register, above Full Name)
+                    if (!uiState.isLoginMode) {
+                        ExposedDropdownMenuBox(
+                            expanded = roleDropdownExpanded,
+                            onExpandedChange = { roleDropdownExpanded = !roleDropdownExpanded }
+                        ) {
+                            OutlinedTextField(
+                                value = uiState.selectedRole,
+                                onValueChange = { },
+                                readOnly = true,
+                                label = { Text("Role") },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Badge, contentDescription = null)
+                                },
+                                trailingIcon = {
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .menuAnchor(),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            
+                            ExposedDropdownMenu(
+                                expanded = roleDropdownExpanded,
+                                onDismissRequest = { roleDropdownExpanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Guidance Admin") },
+                                    onClick = {
+                                        authViewModel.setRole("Guidance Admin")
+                                        roleDropdownExpanded = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Guard") },
+                                    onClick = {
+                                        authViewModel.setRole("Guard")
+                                        roleDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    
                     // Full Name field (only for register)
                     if (!uiState.isLoginMode) {
                         OutlinedTextField(
@@ -201,24 +247,29 @@ fun LoginScreen(
                         )
                     }
 
+ 
+
                     // Email field
                     OutlinedTextField(
                         value = email,
                         onValueChange = { email = it },
-                        label = { Text(if (uiState.isLoginMode) "Email/Full name" else "Email") },
+                        label = { Text(if (uiState.isLoginMode) "Email or Full Name" else "Email") },
+                        placeholder = { Text(if (uiState.isLoginMode) "Enter email or full name" else "Enter email") },
                         leadingIcon = {
                             Icon(Icons.Default.Email, contentDescription = null)
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Email,
+                            keyboardType = if (uiState.isLoginMode) KeyboardType.Text else KeyboardType.Email,
                             imeAction = ImeAction.Next
                         ),
                         keyboardActions = KeyboardActions(
                             onNext = { focusManager.moveFocus(FocusDirection.Down) }
                         )
                     )
+
+ 
 
                     // Password field
                     OutlinedTextField(
@@ -280,52 +331,54 @@ fun LoginScreen(
                             keyboardActions = KeyboardActions(
                                 onDone = {
                                     if (password == confirmPassword) {
-                                        authViewModel.register(fullName, email, password, uiState.rfidNumber)
+                                        authViewModel.register(fullName, email, password, uiState.selectedRole, uiState.rfidNumber)
                                     }
                                 }
                             )
                         )
                         
-                        // RFID Number field (only for register)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            OutlinedTextField(
-                                value = uiState.rfidNumber ?: "",
-                                onValueChange = { /* Read-only field */ },
-                                label = { Text("RFID Number") },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Badge, contentDescription = null)
-                                },
-                                readOnly = true,
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                                placeholder = { Text("Tap refresh to get RFID") }
-                            )
-                            
-                            IconButton(
-                                onClick = { authViewModel.refreshRfidNumber() },
-                                enabled = !uiState.isRfidLoading,
-                                modifier = Modifier
-                                    .size(56.dp)
-                                    .background(
-                                        color = PrimaryBlue,
-                                        shape = RoundedCornerShape(12.dp)
-                                    )
+                        // RFID Number field (only for register and Guidance Admin role)
+                        if (uiState.selectedRole == "Guidance Admin") {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                if (uiState.isRfidLoading) {
-                                    CircularProgressIndicator(
-                                        color = Color.White,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                } else {
-                                    Icon(
-                                        Icons.Default.Refresh,
-                                        contentDescription = "Refresh RFID",
-                                        tint = Color.White
-                                    )
+                                OutlinedTextField(
+                                    value = uiState.rfidNumber ?: "",
+                                    onValueChange = { /* Read-only field */ },
+                                    label = { Text("RFID Number") },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Badge, contentDescription = null)
+                                    },
+                                    readOnly = true,
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    placeholder = { Text("Tap refresh to get RFID") }
+                                )
+                                
+                                IconButton(
+                                    onClick = { authViewModel.refreshRfidNumber() },
+                                    enabled = !uiState.isRfidLoading,
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .background(
+                                            color = PrimaryBlue,
+                                            shape = RoundedCornerShape(12.dp)
+                                        )
+                                ) {
+                                    if (uiState.isRfidLoading) {
+                                        CircularProgressIndicator(
+                                            color = Color.White,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Default.Refresh,
+                                            contentDescription = "Refresh RFID",
+                                            tint = Color.White
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -348,7 +401,7 @@ fun LoginScreen(
                                 authViewModel.login(email, password)
                             } else {
                                 if (password == confirmPassword) {
-                                    authViewModel.register(fullName, email, password, uiState.rfidNumber)
+                                    authViewModel.register(fullName, email, password, uiState.selectedRole, uiState.rfidNumber)
                                 }
                             }
                         },

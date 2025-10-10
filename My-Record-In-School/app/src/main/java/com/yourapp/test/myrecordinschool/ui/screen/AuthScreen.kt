@@ -74,101 +74,204 @@ fun AuthScreen(
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Blue40,
-                            Blue40.copy(alpha = 0.8f),
-                            MaterialTheme.colorScheme.background
-                        )
-                    )
-                )
-        ) {
-            // Header
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                IconButton(
-                    onClick = onNavigateToSettings,
-                    modifier = Modifier.align(Alignment.TopEnd)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Settings,
-                        contentDescription = "Settings",
-                        tint = MaterialTheme.colorScheme.onPrimary
-                    )
-                }
-                
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(top = 32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "My Record in School",
-                        style = MaterialTheme.typography.headlineLarge,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Student Portal",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
-                    )
-                }
-            }
-            
-            // Main Content Card
-            Card(
+        if (isLoginMode) {
+            // Login Mode: Blue background + black box + white card
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                    .background(Blue40)  // Blue background (bottom layer)
             ) {
-                Column(
+                // Header
+                Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp)
-                        .verticalScroll(rememberScrollState())
+                        .fillMaxWidth()
+                        .padding(16.dp)
                 ) {
-                    // Tab Buttons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    IconButton(
+                        onClick = onNavigateToSettings,
+                        modifier = Modifier.align(Alignment.TopEnd)
                     ) {
-                        TabButton(
-                            text = "Login",
-                            isSelected = isLoginMode,
-                            onClick = { isLoginMode = true },
-                            modifier = Modifier.weight(1f)
-                        )
-                        TabButton(
-                            text = "Register",
-                            isSelected = !isLoginMode,
-                            onClick = { isLoginMode = false },
-                            modifier = Modifier.weight(1f)
+                        Icon(
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = "Settings",
+                            tint = MaterialTheme.colorScheme.onPrimary
                         )
                     }
                     
-                    Spacer(modifier = Modifier.height(32.dp))
-                    
-                    // Content
-                    if (isLoginMode) {
-                        LoginForm(
-                            authViewModel = authViewModel,
-                            isLoading = isLoading
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(top = 32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "My Record in School",
+                            style = MaterialTheme.typography.headlineLarge,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            fontWeight = FontWeight.Bold
                         )
-                    } else {
+                        Text(
+                            text = "Student Portal",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+                
+                // Centered area with black box background
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // Black background box (middle layer) - just a box, not extending
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .wrapContentHeight()
+                            .padding(horizontal = 24.dp),
+                        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color.Black  // Black background box
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                    ) {
+                        // White card on top (top layer)
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(4.dp),
+                            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp)
+                            ) {
+                                // Tab Buttons
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    TabButton(
+                                        text = "Login",
+                                        isSelected = isLoginMode,
+                                        onClick = { isLoginMode = true },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    TabButton(
+                                        text = "Register",
+                                        isSelected = !isLoginMode,
+                                        onClick = { isLoginMode = false },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                                
+                                Spacer(modifier = Modifier.height(32.dp))
+                                
+                                LoginForm(
+                                    authViewModel = authViewModel,
+                                    isLoading = isLoading
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // Register Mode: Keep original design unchanged
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Blue40,
+                                Blue40.copy(alpha = 0.8f),
+                                MaterialTheme.colorScheme.background
+                            )
+                        )
+                    )
+            ) {
+                // Header
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    IconButton(
+                        onClick = onNavigateToSettings,
+                        modifier = Modifier.align(Alignment.TopEnd)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = "Settings",
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                    
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(top = 32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "My Record in School",
+                            style = MaterialTheme.typography.headlineLarge,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Student Portal",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+                
+                // Main Content Card
+                Card(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        // Tab Buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TabButton(
+                                text = "Login",
+                                isSelected = isLoginMode,
+                                onClick = { isLoginMode = true },
+                                modifier = Modifier.weight(1f)
+                            )
+                            TabButton(
+                                text = "Register",
+                                isSelected = !isLoginMode,
+                                onClick = { isLoginMode = false },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(32.dp))
+                        
+                        // Content
                         RegisterForm(
                             authViewModel = authViewModel,
                             isLoading = isLoading,
@@ -179,6 +282,7 @@ fun AuthScreen(
             }
         }
         
+
         // Snackbar Host
         SnackbarHost(
             hostState = snackbarHostState,

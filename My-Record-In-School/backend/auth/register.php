@@ -54,19 +54,19 @@ try {
     $section = trim($input['section']);
     $rfid = isset($input['rfid']) ? trim($input['rfid']) : null; 
     
-    // Parse name into components
+    // Parse name into components for new field structure
     $name_parts = explode(',', $name, 2);
     if (count($name_parts) === 2) {
-        $surname = trim($name_parts[0]);
-        $firstname_lastname = trim($name_parts[1]);
-        $name_sub_parts = explode(' ', $firstname_lastname, 2);
+        $lastname = trim($name_parts[0]);
+        $firstname_middlename = trim($name_parts[1]);
+        $name_sub_parts = explode(' ', $firstname_middlename, 2);
         $firstname = trim($name_sub_parts[0]);
-        $lastname = isset($name_sub_parts[1]) ? trim($name_sub_parts[1]) : '';
+        $middlename = isset($name_sub_parts[1]) ? trim($name_sub_parts[1]) : '';
     } else {
         // Fallback: treat as firstname only
-        $surname = '';
-        $firstname = $name;
         $lastname = '';
+        $firstname = $name;
+        $middlename = '';
     }
     
     // Hash the password for security (but keep backward compatibility)
@@ -90,17 +90,18 @@ try {
     $conn->beginTransaction();
     
     try {
-        // Insert into the combined database
-        $insert_query = "INSERT INTO students (student_number, surname, firstname, lastname, course, yearlevel, section, rfid, password) 
-                        VALUES (:student_number, :surname, :firstname, :lastname, :course, :yearlevel, :rfid, :password)";
+        // Insert into the combined database using new field structure
+        $insert_query = "INSERT INTO students (student_number, lastname, firstname, middlename, course, yearlevel, section, rfid, password) 
+                        VALUES (:student_number, :lastname, :firstname, :middlename, :course, :yearlevel, :section, :rfid, :password)";
         
         $stmt = $conn->prepare($insert_query);
         $stmt->bindParam(':student_number', $student_id);
-        $stmt->bindParam(':surname', $surname);
-        $stmt->bindParam(':firstname', $firstname);
         $stmt->bindParam(':lastname', $lastname);
+        $stmt->bindParam(':firstname', $firstname);
+        $stmt->bindParam(':middlename', $middlename);
         $stmt->bindParam(':course', $course);
         $stmt->bindParam(':yearlevel', $year);
+        $stmt->bindParam(':section', $section);
         $stmt->bindParam(':rfid', $rfid);
         $stmt->bindParam(':password', $hashed_password);
         $stmt->execute();
@@ -109,15 +110,15 @@ try {
         $conn->commit();
         
         // Get the created student data for response
-        $get_student_query = "SELECT student_number, surname, firstname, lastname, course, yearlevel as year_level, section, created_at, updated_at 
+        $get_student_query = "SELECT student_number, lastname, firstname, middlename, course, yearlevel, section, created_at, updated_at 
                              FROM students WHERE student_number = :student_number LIMIT 1";
         $get_stmt = $conn->prepare($get_student_query);
         $get_stmt->bindParam(':student_number', $student_id);
         $get_stmt->execute();
         $student = $get_stmt->fetch(PDO::FETCH_ASSOC);
         
-        // Construct full name for response
-        $full_name = trim($student['surname'] . ', ' . $student['firstname'] . ' ' . ($student['lastname'] ?: ''));
+        // Construct full name for response using new field structure
+        $full_name = trim($student['lastname'] . ', ' . $student['firstname'] . ' ' . ($student['middlename'] ?: ''));
         
         echo json_encode(array(
             "success" => true,
@@ -126,13 +127,14 @@ try {
                 "id" => intval($student['student_number']),
                 "student_id" => strval($student['student_number']),
                 "name" => $full_name,
-                "year" => $student['year_level'] ?: '',
+                "year" => $student['yearlevel'] ?: '',
                 "course" => $student['course'] ?: '',
                 "section" => $student['section'] ?: '',
                 "created_at" => $student['created_at'] ?: date('Y-m-d H:i:s'),
                 "updated_at" => $student['updated_at'] ?: date('Y-m-d H:i:s')
             )
         ));
+        
         
     } catch(Exception $e) {
         // Rollback transaction

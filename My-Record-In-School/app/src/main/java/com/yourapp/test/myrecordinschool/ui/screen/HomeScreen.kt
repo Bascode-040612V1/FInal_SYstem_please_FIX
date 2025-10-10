@@ -55,6 +55,11 @@ fun HomeScreen(
     val attendanceSyncStatus by attendanceViewModel.syncStatus.collectAsState()
     val violationNetworkState by violationViewModel.networkState.collectAsState()
     
+    // Offline status indicators
+    val isOfflineMode by violationViewModel.isOfflineMode.observeAsState(false)
+    val lastSyncTime by violationViewModel.lastSyncTime.observeAsState("Never synced")
+    val violationStats by violationViewModel.violationStats.observeAsState()
+    
     LaunchedEffect(Unit) {
         violationViewModel.loadViolations()
         attendanceViewModel.loadAttendance()
@@ -73,13 +78,41 @@ fun HomeScreen(
                         color = MaterialTheme.colorScheme.onPrimary
                     )
                     
-                    // Show network status
-                    if (violationNetworkState == NetworkState.Unavailable) {
-                        Text(
-                            text = "Offline Mode",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
-                        )
+                    // Show network status and sync info
+                    if (violationNetworkState == NetworkState.Unavailable || isOfflineMode) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.CloudOff,
+                                contentDescription = "Offline",
+                                modifier = Modifier.size(16.dp),
+                                tint = Color.Orange
+                            )
+                            Text(
+                                text = "Offline Mode",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                            )
+                        }
+                    } else {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.CloudDone,
+                                contentDescription = "Online",
+                                modifier = Modifier.size(16.dp),
+                                tint = Color.Green
+                            )
+                            Text(
+                                text = lastSyncTime,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                            )
+                        }
                     }
                 }
             },
@@ -170,8 +203,52 @@ private fun ViolationsTab(
     val violationDataState by violationViewModel.violationDataState.collectAsState()
     val isLoading by violationViewModel.isLoading.observeAsState(false)
     val errorMessage by violationViewModel.errorMessage.observeAsState("")
+    val isOfflineMode by violationViewModel.isOfflineMode.observeAsState(false)
+    val violationStats by violationViewModel.violationStats.observeAsState()
+    val networkState by violationViewModel.networkState.collectAsState()
     
     Column {
+        // Offline Status Banner (if offline)
+        if (isOfflineMode) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.Orange.copy(alpha = 0.1f)
+                ),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, Color.Orange.copy(alpha = 0.3f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Info,
+                        contentDescription = "Offline Info",
+                        tint = Color.Orange,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Column {
+                        Text(
+                            text = "Offline Mode Active",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Orange
+                        )
+                        Text(
+                            text = "Showing saved violations from local database. Data will sync when connection is restored.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+        }
         // Header with Info
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -199,6 +276,29 @@ private fun ViolationsTab(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    
+                    // Show violation statistics if available
+                    violationStats?.let { stats ->
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = stats.getSummaryText(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                            if (stats.hasUrgentViolations()) {
+                                Icon(
+                                    imageVector = Icons.Filled.Warning,
+                                    contentDescription = "Urgent",
+                                    tint = Color.Red,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
                 }
                 
                 // Refresh Button
@@ -432,24 +532,106 @@ private fun AttendanceTab(
     val attendanceDataState by attendanceViewModel.attendanceDataState.collectAsState()
     val isLoading by attendanceViewModel.isLoading.observeAsState(false)
     val errorMessage by attendanceViewModel.errorMessage.observeAsState("")
+    val isOfflineMode by attendanceViewModel.isOfflineMode.observeAsState(false)
+    val attendanceStats by attendanceViewModel.attendanceStats.observeAsState()
     
-    when {
-        isLoading -> {
-            LoadingIndicator(
-                isLoading = true,
-                message = "Loading attendance..."
-            )
+    Column {
+        // Offline Status Banner (if offline)
+        if (isOfflineMode) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.Orange.copy(alpha = 0.1f)
+                ),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, Color.Orange.copy(alpha = 0.3f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Info,
+                        contentDescription = "Offline Info",
+                        tint = Color.Orange,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Column {
+                        Text(
+                            text = "Offline Mode Active",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Orange
+                        )
+                        Text(
+                            text = "Showing saved attendance from local database. Data will sync when connection is restored.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
         }
         
-        errorMessage.isNotEmpty() -> {
-            ErrorCard(
-                message = errorMessage,
-                onRetry = { attendanceViewModel.retryOperation() }
-            )
+        // Attendance Statistics Card
+        attendanceStats?.let { stats ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Attendance Summary",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = stats.getSummaryText(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Grade: ${stats.getAttendanceGrade()} (${String.format("%.1f", stats.attendancePercentage)}%)",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
         }
         
-        else -> {
-            AttendanceCalendar(attendanceViewModel = attendanceViewModel)
+        // Main Content
+        when {
+            isLoading -> {
+                LoadingIndicator(
+                    isLoading = true,
+                    message = "Loading attendance..."
+                )
+            }
+            
+            errorMessage.isNotEmpty() -> {
+                ErrorCard(
+                    message = errorMessage,
+                    onRetry = { attendanceViewModel.retryOperation() }
+                )
+            }
+            
+            else -> {
+                AttendanceCalendar(attendanceViewModel = attendanceViewModel)
+            }
         }
     }
 }

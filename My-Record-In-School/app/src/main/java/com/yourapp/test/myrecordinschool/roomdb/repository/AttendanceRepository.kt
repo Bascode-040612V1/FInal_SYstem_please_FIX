@@ -3,6 +3,9 @@ package com.yourapp.test.myrecordinschool.roomdb.repository
 import com.yourapp.test.myrecordinschool.roomdb.dao.AttendanceDao
 import com.yourapp.test.myrecordinschool.roomdb.entity.AttendanceEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+
+
 
 class AttendanceRepository(private val attendanceDao: AttendanceDao) {
 
@@ -20,6 +23,13 @@ class AttendanceRepository(private val attendanceDao: AttendanceDao) {
     fun getAttendanceByStudentAndMonth(studentId: String, yearMonth: String): Flow<List<AttendanceEntity>> {
         return attendanceDao.getAttendanceByStudentAndMonth(studentId, yearMonth)
     }
+    
+    // Suspend version for direct access (needed for calendar generation)
+    suspend fun getAttendanceByStudentAndMonthSuspend(studentId: String, yearMonth: String): List<AttendanceEntity> {
+        return attendanceDao.getAttendanceByStudentAndMonth(studentId, yearMonth).first()
+    }
+
+    
 
     suspend fun saveAttendance(attendance: List<AttendanceEntity>) {
         attendanceDao.insertAttendance(attendance)
@@ -71,7 +81,7 @@ class AttendanceRepository(private val attendanceDao: AttendanceDao) {
         return attendanceDao.getAttendanceByDateRange(studentId, startDate, endDate)
     }
 
-    suspend fun getAttendanceStats(studentId: String): AttendanceStats {
+    suspend fun getAttendanceStatsOld(studentId: String): AttendanceStats {
         val presentCount = attendanceDao.getPresentCount(studentId)
         val absentCount = attendanceDao.getAbsentCount(studentId)
         val lateCount = attendanceDao.getLateCount(studentId)
@@ -107,5 +117,34 @@ class AttendanceRepository(private val attendanceDao: AttendanceDao) {
     suspend fun cleanupOldAttendance(studentId: String, daysToKeep: Int = 180) {
         val cutoffDate = java.time.LocalDate.now().minusDays(daysToKeep.toLong()).toString()
         attendanceDao.deleteOldAttendance(studentId, cutoffDate)
+    }
+    
+    // Offline support methods for sync management
+    suspend fun getUnsyncedAttendance(studentId: String): List<AttendanceEntity> {
+        return attendanceDao.getUnsyncedAttendance(studentId)
+    }
+    
+    suspend fun updateSyncStatus(attendanceId: Int, synced: Boolean, hasChanges: Boolean) {
+        attendanceDao.updateSyncStatus(attendanceId, synced, hasChanges)
+    }
+    
+    suspend fun getPendingChangesCount(studentId: String): Int {
+        return attendanceDao.getPendingChangesCount(studentId)
+    }
+    
+    suspend fun updateLastSyncTime(studentId: String, timestamp: Long) {
+        attendanceDao.updateLastSyncTime(studentId, timestamp)
+    }
+    
+    suspend fun markAllAsSynced(studentId: String) {
+        attendanceDao.markAllAsSynced(studentId)
+    }
+    
+    suspend fun getOfflineCreatedAttendance(studentId: String): List<AttendanceEntity> {
+        return attendanceDao.getOfflineCreatedAttendance(studentId)
+    }
+    
+    suspend fun getStatusCountByMonth(studentId: String, status: String, yearMonth: String): Int {
+        return attendanceDao.getStatusCountByMonth(studentId, status, yearMonth)
     }
 }

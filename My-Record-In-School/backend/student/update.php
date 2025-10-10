@@ -68,17 +68,19 @@ try {
             // Commit transaction
             $conn->commit();
             
-            // Get updated student data
-            $get_student_query = "SELECT student_number, surname, firstname, lastname, yearlevel, course, section, created_at, updated_at 
+            // Get updated student data using new field structure
+            $get_student_query = "SELECT student_number, lastname, firstname, middlename, yearlevel, course, section, created_at, updated_at 
                                  FROM students WHERE student_number = :student_number LIMIT 1";
             $get_stmt = $conn->prepare($get_student_query);
             $get_stmt->bindParam(':student_number', $student_id);
             $get_stmt->execute();
             $student = $get_stmt->fetch(PDO::FETCH_ASSOC);
             
-            // Construct full name
-            $full_name = trim($student['surname'] . ', ' . $student['firstname'] . ' ' . ($student['lastname'] ?: ''));
+            // Construct full name using new field structure
+            $full_name = trim($student['lastname'] . ', ' . $student['firstname'] . ' ' . ($student['middlename'] ?: ''));
             
+
+
             echo json_encode(array(
                 "success" => true,
                 "message" => "Student information updated successfully",

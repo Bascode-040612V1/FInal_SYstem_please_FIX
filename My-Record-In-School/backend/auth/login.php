@@ -44,7 +44,7 @@ try {
     $password = $input['password'];
     
     // Check in the combined database students table
-    $query = "SELECT student_number, surname, firstname, lastname, course, yearlevel, section, password, created_at, updated_at 
+    $query = "SELECT student_number, lastname, firstname, middlename, course, yearlevel, section, password, created_at, updated_at 
               FROM students WHERE student_number = :student_number LIMIT 1";
     $stmt = $conn->prepare($query);
     $stmt->bindParam(':student_number', $student_id);
@@ -69,8 +69,8 @@ try {
         }
         
         if ($password_valid) {
-            // Construct full name
-            $full_name = trim($student['surname'] . ', ' . $student['firstname'] . ' ' . ($student['lastname'] ?: ''));
+            // Construct full name using new field structure
+            $full_name = trim($student['lastname'] . ', ' . $student['firstname'] . ' ' . ($student['middlename'] ?: ''));
             
             echo json_encode(array(
                 "success" => true,
@@ -86,6 +86,7 @@ try {
                     "updated_at" => $student['updated_at'] ?: date('Y-m-d H:i:s')
                 )
             ));
+
         } else {
             echo json_encode(array(
                 "success" => false,

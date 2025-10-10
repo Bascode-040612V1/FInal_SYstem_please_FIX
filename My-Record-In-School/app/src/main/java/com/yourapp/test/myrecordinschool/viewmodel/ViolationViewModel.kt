@@ -26,9 +26,30 @@ class ViolationViewModel(application: Application) : AndroidViewModel(applicatio
     private val repository = ViolationRepository(violationDao)
     private val syncManager = SyncManager(application)
     
-    // Data state for violations
+    // Data state for violations - Always show from local database (offline-first)
     private val _violationDataState = MutableStateFlow<DataState<List<ViolationEntity>>>(DataState.Loading)
     val violationDataState: StateFlow<DataState<List<ViolationEntity>>> = _violationDataState.asStateFlow()
+    
+    // Local database violations (primary source of truth)
+    val violationsFromDb: LiveData<List<ViolationEntity>> = repository.getViolationsByStudent(
+        appPreferences.getStudentId() ?: ""
+    ).asLiveData()
+    
+    // UI state
+    private val _isRefreshing = MutableLiveData<Boolean>()
+    val isRefreshing: LiveData<Boolean> = _isRefreshing
+    
+    // Offline indicator
+    private val _isOfflineMode = MutableLiveData<Boolean>()
+    val isOfflineMode: LiveData<Boolean> = _isOfflineMode
+    
+    // Last sync info
+    private val _lastSyncTime = MutableLiveData<String>()
+    val lastSyncTime: LiveData<String> = _lastSyncTime
+    
+    // Violation statistics
+    private val _violationStats = MutableLiveData<ViolationStats>()
+    val violationStats: LiveData<ViolationStats> = _violationStats
     
     // Legacy LiveData for backwards compatibility
     private val _violations = MutableLiveData<List<Violation>>()
@@ -44,7 +65,7 @@ class ViolationViewModel(application: Application) : AndroidViewModel(applicatio
     val selectedViolation: LiveData<Violation?> = _selectedViolation
 
     // Observable violations from database (offline-first)
-    val violationsFromDb: LiveData<List<ViolationEntity>> = 
+    val violationsFromDbCompat: LiveData<List<ViolationEntity>> = 
         appPreferences.getStudentId()?.let { studentId ->
             repository.getViolationsByStudent(studentId).asLiveData()
         } ?: MutableLiveData(emptyList())
@@ -62,7 +83,48 @@ class ViolationViewModel(application: Application) : AndroidViewModel(applicatio
         } ?: MutableLiveData(0)
 
     init {
-        loadViolationsOfflineFirst()
+        // Load violations from local database first (offline-first)
+        loadViolationsFromDatabase()
+        
+        // Update sync status
+        updateSyncInfo()
+        
+        // Monitor network state
+        viewModelScope.launch {
+            networkState.collect { state ->
+                _isOfflineMode.value = state != NetworkState.Available
+                if (state == NetworkState.Available) {
+                    // Auto-sync when network becomes available
+                    syncViolationsInBackground()
+                }
+            }
+        }
+        
+        // Monitor sync status
+        viewModelScope.launch {
+            syncStatus.collect { status ->
+                updateLastSyncTime(status.lastSyncTime)
+                
+                // Handle sync completion
+                when (status.syncState) {
+                    is SyncState.Success -> {
+                        _errorMessage.value = ""
+                        _isRefreshing.value = false
+                    }
+                    is SyncState.Error -> {
+                        _errorMessage.value = status.syncState.message
+                        _isRefreshing.value = false
+                    }
+                    is SyncState.Syncing -> {
+                        _isRefreshing.value = true
+                    }
+                    else -> {
+                        _isRefreshing.value = false
+                    }
+                }
+            }
+        }
+        
         syncManager.startPeriodicSync()
     }
     
@@ -71,28 +133,114 @@ class ViolationViewModel(application: Application) : AndroidViewModel(applicatio
         syncManager.stopPeriodicSync()
     }
     
-    private fun loadViolationsOfflineFirst() {
-        val studentId = appPreferences.getStudentId()
-        if (studentId == null) {
-            _violationDataState.value = DataState.Error("Student ID not found. Please log in again.")
-            return
-        }
-        
+    private fun loadViolationsFromDatabase() {
         viewModelScope.launch {
-            // First, load from cache
-            val cachedCount = repository.getViolationCount(studentId)
-            if (cachedCount > 0) {
-                _violationDataState.value = DataState.Cached(
-                    data = emptyList(), // Will be populated by Flow
-                    isStale = shouldRefreshData()
-                )
-            } else {
+            try {
+                _isLoading.value = true
                 _violationDataState.value = DataState.Loading
+                
+                val studentId = appPreferences.getStudentId()
+                if (studentId.isNullOrEmpty()) {
+                    _violationDataState.value = DataState.Error("Student ID not found")
+                    return@launch
+                }
+                
+                // Load from local database (offline-first)
+                repository.getViolationsByStudent(studentId).collect { violations ->
+                    _violationDataState.value = DataState.Success(violations)
+                    updateViolationStats(violations)
+                    
+                    // Convert to API format for compatibility
+                    val apiViolations = violations.map { entity ->
+                        Violation(
+                            id = entity.id,
+                            student_id = entity.student_id,
+                            student_name = entity.student_name,
+                            year_level = entity.year_level,
+                            course = entity.course,
+                            section = entity.section,
+                            violation_type = entity.violation_type,
+                            violation_description = entity.violation_description,
+                            offense_count = entity.offense_count,
+                            original_offense_count = entity.original_offense_count,
+                            penalty = entity.penalty,
+                            recorded_by = entity.recorded_by,
+                            date_recorded = entity.date_recorded,
+                            acknowledged = entity.acknowledged,
+                            category = entity.category
+                        )
+                    }
+                    _violations.value = apiViolations
+                }
+                
+                _isLoading.value = false
+                
+                // Try to sync in background if network is available
+                if (networkState.value == NetworkState.Available) {
+                    syncViolationsInBackground()
+                }
+                
+            } catch (e: Exception) {
+                _violationDataState.value = DataState.Error("Failed to load violations: ${e.message}")
+                _isLoading.value = false
+                android.util.Log.e("ViolationViewModel", "Error loading violations from database", e)
             }
-            
-            // Then sync from network
-            refreshViolations()
         }
+    }
+    
+    private suspend fun syncViolationsInBackground() {
+        try {
+            syncManager.syncViolations(forceRefresh = false)
+            updateSyncInfo()
+        } catch (e: Exception) {
+            android.util.Log.w("ViolationViewModel", "Background sync failed", e)
+        }
+    }
+    
+    private fun updateViolationStats(violations: List<ViolationEntity>) {
+        val stats = ViolationStats(
+            totalViolations = violations.size,
+            unacknowledgedCount = violations.count { it.acknowledged == 0 },
+            categoryCounts = violations.groupingBy { it.category }.eachCount(),
+            recentViolations = violations.take(5),
+            hasNewViolations = violations.any { 
+                it.acknowledged == 0 && 
+                System.currentTimeMillis() - it.last_sync_timestamp < 86400000 // 24 hours
+            }
+        )
+        _violationStats.value = stats
+    }
+    
+    private fun updateSyncInfo() {
+        viewModelScope.launch {
+            val lastSync = appPreferences.getLastViolationSync()
+            updateLastSyncTime(lastSync)
+        }
+    }
+    
+    private fun updateLastSyncTime(timestamp: Long) {
+        if (timestamp > 0) {
+            val timeAgo = getTimeAgo(timestamp)
+            _lastSyncTime.value = "Last synced: $timeAgo"
+        } else {
+            _lastSyncTime.value = "Never synced"
+        }
+    }
+    
+    private fun getTimeAgo(timestamp: Long): String {
+        val now = System.currentTimeMillis()
+        val diff = now - timestamp
+        
+        return when {
+            diff < 60000 -> "Just now"
+            diff < 3600000 -> "${diff / 60000}m ago"
+            diff < 86400000 -> "${diff / 3600000}h ago"
+            else -> "${diff / 86400000}d ago"
+        }
+    }
+
+    private fun loadViolationsOfflineFirst() {
+        loadViolationsFromDatabase()
     }
     
     private fun shouldRefreshData(): Boolean {

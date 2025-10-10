@@ -14,7 +14,7 @@ if (!$data || !isset($data->student_id) || !isset($data->violations) || empty($d
 }
 
 // Validate input
-$student_id = validateInput($data->student_id, 'alphanumeric', 20);
+$student_id = validateInput($data->student_id, 'numeric', 20);
 $recorded_by = validateInput($data->recorded_by ?? 'System', 'string', 100);
 
 if (!$student_id) {
@@ -38,22 +38,22 @@ try {
     $student = $studentStmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$student) {
+        $conn->rollback();
         sendResponse(false, "Student not found");
     }
     
-    // Parse recorded_by to get role and ID
-    $recorded_by_role = 'guard'; // default
-    $recorded_by_id = 1; // default
+    // Determine recorder details based on recorded_by
+    $recorded_by_role = 'guard'; // Default
+    $recorded_by_id = 1; // Default guard ID
     
-    // Try to extract role from recorded_by string (Admin: Name, Guard: Name, etc.)
-    if (strpos($recorded_by, 'Admin:') === 0 || strpos($recorded_by, 'Teacher:') === 0) {
-        $recorded_by_role = 'admin';
-        // Get admin ID by name (simplified - you might want to pass ID directly)
-        $adminQuery = "SELECT rfid FROM admins WHERE name LIKE ? LIMIT 1";
+    if (!empty($recorded_by)) {
+        // Try to find admin first
+        $adminQuery = "SELECT rfid FROM admins WHERE name = ? OR email = ?";
         $adminStmt = $conn->prepare($adminQuery);
-        $name = trim(substr($recorded_by, strpos($recorded_by, ':') + 1));
-        $adminStmt->execute(["%$name%"]);
+        $adminStmt->execute([$recorded_by, $recorded_by]);
+        
         if ($adminStmt->rowCount() > 0) {
+            $recorded_by_role = 'admin';
             $admin = $adminStmt->fetch(PDO::FETCH_ASSOC);
             $recorded_by_id = $admin['rfid'];
         }
@@ -85,32 +85,32 @@ try {
         $violation_id = $conn->lastInsertId();
         $violation_ids[] = $violation_id;
         
-        // Get the offense count that was set by the trigger
-        $getViolationQuery = "SELECT offense_count, penalty FROM violations WHERE violation_id = ?";
-        $getViolationStmt = $conn->prepare($getViolationQuery);
-        $getViolationStmt->execute([$violation_id]);
-        $inserted_violation = $getViolationStmt->fetch(PDO::FETCH_ASSOC);
+        // Get the calculated offense count and penalty from the inserted record
+        $resultQuery = "SELECT offense_count, penalty FROM violations WHERE violation_id = ?";
+        $resultStmt = $conn->prepare($resultQuery);
+        $resultStmt->execute([$violation_id]);
+        $result = $resultStmt->fetch(PDO::FETCH_ASSOC);
         
-        if ($inserted_violation && $inserted_violation['offense_count'] > $highest_offense) {
-            $highest_offense = $inserted_violation['offense_count'];
-            $penalty = $inserted_violation['penalty'] ?: "Warning";
+        if ($result && $result['offense_count'] > $highest_offense) {
+            $highest_offense = $result['offense_count'];
+            $penalty = $result['penalty'] ?? "Warning";
         }
     }
     
     $conn->commit();
     
-    $response_data = [
-        'violation_id' => count($violation_ids) > 0 ? (int)$violation_ids[0] : 0,
+    $response = [
+        'violation_id' => $violation_ids[0] ?? 0,
         'offense_count' => $highest_offense,
         'penalty' => $penalty,
-        'message' => $highest_offense . ($highest_offense == 1 ? "st" : ($highest_offense == 2 ? "nd" : "rd")) . " Offense"
+        'message' => "Violation(s) submitted successfully for " . $student['student_name']
     ];
     
-    sendResponse(true, "Violation submitted successfully", $response_data);
+    sendResponse(true, "Violations submitted successfully", $response);
     
 } catch(PDOException $exception) {
     $conn->rollback();
     error_log("Violation submission error: " . $exception->getMessage());
-    sendResponse(false, "Submission failed");
+    sendResponse(false, "Failed to submit violations");
 }
 ?>

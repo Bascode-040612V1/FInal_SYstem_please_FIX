@@ -6,7 +6,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     sendResponse(false, "Only GET method is allowed");
 }
 
-$student_id = validateInput($_GET['student_id'] ?? '', 'alphanumeric', 20);
+$student_id = validateInput($_GET['student_id'] ?? '', 'numeric', 20);
 
 if (!$student_id) {
     sendResponse(false, "Valid student ID is required");
